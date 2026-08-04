@@ -12,6 +12,7 @@ __pycache__/
 data/raw/*
 data/interim/*
 data/processed/*
+.kaggle/
 
 # Keep empty directory placeholders
 !data/raw/.gitkeep
