@@ -1,11 +1,43 @@
-.venv/
-__pycache__/
-*.pyc
+# Environment variables and secrets
 .env
-data/raw/
-data/interim/
-data/processed/
-models/
-mlruns/
+
+# Python environment
+.venv/
+venv/
+__pycache__/
+*.py[cod]
 .pytest_cache/
+
+# Raw, intermediate and generated data
+data/raw/*
+data/interim/*
+data/processed/*
+
+# Keep empty directory placeholders
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+
+# Database storage
+postgres_data/
+pgdata/
+*.dump
+*.backup
+
+# Model artifacts
+models/*.pkl
+models/*.joblib
+models/*.pickle
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# IDE and operating-system files
+.vscode/
+.idea/
 .DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
