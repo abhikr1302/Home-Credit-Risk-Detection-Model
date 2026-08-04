@@ -10,7 +10,8 @@ from sqlalchemy import URL, create_engine, text
 
 load_dotenv()
 
-RAW_DATA_DIRECTORY = Path("data/raw")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RAW_DATA_DIRECTORY = PROJECT_ROOT / "data" / "raw"
 DATABASE_SCHEMA = "raw"
 READ_CHUNK_SIZE = 50_000
 

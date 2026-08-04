@@ -2,7 +2,8 @@ from pathlib import Path
 
 import pandas as pd
 
-file_path = Path("data/raw/application_train.csv")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+file_path = PROJECT_ROOT / "data" / "raw" / "application_train.csv"
 
 if not file_path.exists():
     raise FileNotFoundError(

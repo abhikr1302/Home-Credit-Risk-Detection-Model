@@ -8,7 +8,8 @@ from sqlalchemy import URL, create_engine, inspect, text
 
 load_dotenv()
 
-CSV_PATH = Path("data/raw/application_train.csv")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+CSV_PATH = PROJECT_ROOT / "data" / "raw" / "application_train.csv"
 TABLE_NAME = "application_train"
 SCHEMA_NAME = "raw"
 READ_CHUNK_SIZE = 10_000

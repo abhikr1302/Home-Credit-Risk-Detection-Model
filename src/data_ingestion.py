@@ -1,8 +1,9 @@
 import pandas as pd
 from pathlib import Path
 
-RAW_DIR = Path("data/raw")
-INTERIM_DIR = Path("data/interim")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RAW_DIR = PROJECT_ROOT / "data" / "raw"
+INTERIM_DIR = PROJECT_ROOT / "data" / "interim"
 INTERIM_DIR.mkdir(parents=True, exist_ok=True)
 
 def convert_csv_to_parquet(file_name: str) -> None:
