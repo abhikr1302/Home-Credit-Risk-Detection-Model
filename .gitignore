@@ -42,3 +42,24 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# Kaggle data and credentials
+.kaggle/
+
+# Project datasets
+data/raw/*
+data/interim/*
+data/processed/*
+
+# Keep directory placeholders
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+
+# Secrets
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
