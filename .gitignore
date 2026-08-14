@@ -60,3 +60,10 @@ data/processed/*
 .venv/
 __pycache__/
 *.pyc
+
+# Fitted models
+models/*.joblib
+models/*.pkl
+
+# Generated explainability figures
+reports/figures/*.png
