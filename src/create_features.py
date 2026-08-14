@@ -29,6 +29,9 @@ def create_features() -> None:
 
     print(f"Original shape: {df.shape}")
 
+    # Add dataset type identifier
+    df["dataset_type"] = "train"
+
     # Basic feature engineering
     # Fill missing values for numeric columns
     numeric_cols = df.select_dtypes(include=["number"]).columns
