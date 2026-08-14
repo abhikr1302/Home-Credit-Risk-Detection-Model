@@ -1,0 +1,10 @@
+{
+    "best_f1_threshold": 0.69,
+    "best_f1_score": 0.2990422721268164,
+    "precision_at_best_f1": 0.253393032041416,
+    "recall_at_best_f1": 0.36475327291037263,
+    "recommended_credit_risk_threshold": 0.48,
+    "recall_requirement": 0.7,
+    "precision_at_recommended_threshold": 0.15516023660280745,
+    "recall_at_recommended_threshold": 0.7079556898288016
+}
