@@ -12,7 +12,6 @@ __pycache__/
 data/raw/*
 data/interim/*
 data/processed/*
-.kaggle/
 
 # Keep empty directory placeholders
 !data/raw/.gitkeep
@@ -43,11 +42,9 @@ Thumbs.db
 *.log
 logs/
 
-# Kaggle data and credentials
+# Kaggle data and credentials (exclude entire directory)
 .kaggle/
-
-# Project datasets
-data/raw/*
+*.zip
 data/interim/*
 data/processed/*
 
