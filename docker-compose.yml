@@ -23,3 +23,35 @@ services:
 
 volumes:
   postgres_data:
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: credit_risk_api
+
+    ports:
+      - "8000:8000"
+
+    environment:
+      MODEL_PATH: /app/models/final_credit_risk_model.joblib
+      CLASSIFICATION_THRESHOLD: "0.50"
+
+    volumes:
+      - ./models:/app/models:ro
+
+    restart: unless-stopped
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
