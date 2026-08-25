@@ -21,9 +21,6 @@ services:
       timeout: 5s
       retries: 5
 
-volumes:
-  postgres_data:
-
   api:
     build:
       context: .
@@ -55,3 +52,6 @@ volumes:
       timeout: 10s
       retries: 3
       start_period: 30s
+
+volumes:
+  postgres_data:
