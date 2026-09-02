@@ -1,0 +1,74 @@
+[
+    {
+        "name": "depth6_regularized",
+        "roc_auc": 0.7798263763426301,
+        "pr_auc": 0.27569495131012656,
+        "n_estimators": 200,
+        "max_depth": 6,
+        "learning_rate": 0.05,
+        "subsample": 0.85,
+        "colsample_bytree": 0.85,
+        "min_child_weight": 5,
+        "gamma": 0.05
+    },
+    {
+        "name": "depth6_200",
+        "roc_auc": 0.779489556828109,
+        "pr_auc": 0.27692281569623367,
+        "n_estimators": 200,
+        "max_depth": 6,
+        "learning_rate": 0.05,
+        "subsample": 0.9,
+        "colsample_bytree": 0.9,
+        "min_child_weight": 1,
+        "gamma": 0
+    },
+    {
+        "name": "depth5_regularized",
+        "roc_auc": 0.7779330548193005,
+        "pr_auc": 0.27526139481353395,
+        "n_estimators": 200,
+        "max_depth": 5,
+        "learning_rate": 0.05,
+        "subsample": 0.85,
+        "colsample_bytree": 0.85,
+        "min_child_weight": 5,
+        "gamma": 0.05
+    },
+    {
+        "name": "depth5_200",
+        "roc_auc": 0.7777144689326043,
+        "pr_auc": 0.27464175456058426,
+        "n_estimators": 200,
+        "max_depth": 5,
+        "learning_rate": 0.05,
+        "subsample": 0.9,
+        "colsample_bytree": 0.9,
+        "min_child_weight": 1,
+        "gamma": 0
+    },
+    {
+        "name": "baseline_100_depth5",
+        "roc_auc": 0.7767352578096554,
+        "pr_auc": 0.27421870555897676,
+        "n_estimators": 100,
+        "max_depth": 5,
+        "learning_rate": 0.1,
+        "subsample": 1.0,
+        "colsample_bytree": 1.0,
+        "min_child_weight": 1,
+        "gamma": 0
+    },
+    {
+        "name": "depth4_200",
+        "roc_auc": 0.7767170255462224,
+        "pr_auc": 0.27351771338772907,
+        "n_estimators": 200,
+        "max_depth": 4,
+        "learning_rate": 0.05,
+        "subsample": 0.9,
+        "colsample_bytree": 0.9,
+        "min_child_weight": 1,
+        "gamma": 0
+    }
+]

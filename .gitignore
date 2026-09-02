@@ -67,3 +67,7 @@ models/*.pkl
 
 # Generated explainability figures
 reports/figures/*.png
+
+__pycache__/
+*.py[cod]
+.venv/
