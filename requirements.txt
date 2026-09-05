@@ -1,8 +1,10 @@
 fastapi
 uvicorn[standard]
-pandas
 numpy
 scikit-learn
 xgboost
 joblib
 pydantic
+streamlit>=1.38,<2
+requests>=2.32,<3
+pandas>=2.2,<3
