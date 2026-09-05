@@ -12,11 +12,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"
-        ]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -25,29 +21,17 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-
     container_name: credit_risk_api
-
     ports:
       - "8000:8000"
-
     environment:
-      MODEL_PATH: /app/models/final_credit_risk_model.joblib
+      MODEL_PATH: /app/models/xgboost_home_credit_pipeline.joblib
       CLASSIFICATION_THRESHOLD: "0.50"
-
     volumes:
       - ./models:/app/models:ro
-
     restart: unless-stopped
-
     healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
-        ]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
