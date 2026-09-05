@@ -1,10 +1,422 @@
-import json
 import os
-from pathlib import Path
+from typing import Dict, Any
 
-import pandas as pd
+import numpy as np
 import requests
 import streamlit as st
+
+
+# ============================================================
+# Configuration
+# ============================================================
+
+API_URL = os.getenv(
+    "API_URL",
+    "http://127.0.0.1:8000"
+)
+
+
+# ============================================================
+# Model Features
+# Must exactly match the trained XGBoost pipeline
+# ============================================================
+
+FEATURES = [
+    "ext_source_mean",
+    "name_education_type",
+    "name_income_type",
+    "code_gender",
+    "flag_own_car",
+    "ext_source_3",
+    "name_type_suite",
+    "name_family_status",
+    "name_housing_type",
+    "name_contract_type",
+    "installment_late_payment_rate",
+    "flag_document_3",
+    "ext_source_2",
+    "previous_refusal_rate",
+    "credit_card_avg_utilization",
+    "previous_avg_credit_application_ratio",
+    "region_rating_client",
+    "pos_cash_loan_count",
+    "age_years",
+    "employment_years",
+    "credit_card_avg_balance",
+    "credit_card_max_utilization",
+    "ext_source_1",
+    "amt_goods_price",
+    "def_60_cnt_social_circle",
+    "amt_credit",
+    "previous_approval_rate",
+    "flag_own_realty",
+    "amt_annuity",
+    "installment_max_payment_delay",
+    "installment_avg_payment_ratio",
+    "def_30_cnt_social_circle",
+    "bureau_max_overdue",
+    "region_rating_client_w_city",
+    "pos_cash_history_months",
+    "previous_avg_annuity",
+    "days_birth",
+    "pos_cash_active_count",
+    "days_employed",
+    "bureau_avg_days_credit",
+    "bureau_total_debt",
+    "installment_previous_loans",
+    "installment_total_records",
+    "previous_refused_count",
+    "credit_card_dpd_rate",
+    "previous_approved_count",
+    "pos_cash_completed_count",
+    "annuity_to_income_ratio",
+    "credit_to_income_ratio",
+    "bureau_total_credit",
+]
+
+
+# ============================================================
+# Helper Functions
+# ============================================================
+
+def safe_float(value: Any, default=np.nan) -> float:
+    """Safely convert a value to float."""
+
+    try:
+        if value is None:
+            return default
+
+        if isinstance(value, str) and not value.strip():
+            return default
+
+        result = float(value)
+
+        if not np.isfinite(result):
+            return default
+
+        return result
+
+    except (ValueError, TypeError):
+        return default
+
+
+def make_json_safe(value: Any) -> Any:
+    """
+    Convert Python/NumPy values into JSON-safe values.
+
+    JSON does not support NaN or Infinity.
+    These values are converted to None, which becomes JSON null.
+    """
+
+    if value is None:
+        return None
+
+    if isinstance(value, (float, np.floating)):
+
+        if not np.isfinite(value):
+            return None
+
+        return float(value)
+
+    if isinstance(value, (int, np.integer)):
+        return int(value)
+
+    return value
+
+
+def make_features_json_safe(
+    features: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Convert the complete feature dictionary to JSON-safe values."""
+
+    return {
+        feature: make_json_safe(value)
+        for feature, value in features.items()
+    }
+
+
+# ============================================================
+# Feature Preparation
+# ============================================================
+
+def calculate_features(
+    raw: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Convert customer/bank-entered application information
+    into the 50 features expected by the trained model.
+
+    Historical features that normally come from:
+        - Credit bureau
+        - Previous applications
+        - Installment history
+        - Credit card history
+        - POS/Cash history
+
+    are left as NaN.
+
+    The preprocessing pipeline on the API side handles
+    missing values through its trained imputers.
+    """
+
+    # --------------------------------------------------------
+    # Basic values
+    # --------------------------------------------------------
+
+    income = safe_float(
+        raw.get("amt_income_total")
+    )
+
+    credit = safe_float(
+        raw.get("amt_credit")
+    )
+
+    annuity = safe_float(
+        raw.get("amt_annuity")
+    )
+
+    goods_price = safe_float(
+        raw.get("amt_goods_price")
+    )
+
+    age = safe_float(
+        raw.get("age_years")
+    )
+
+    employment_years = safe_float(
+        raw.get("employment_years")
+    )
+
+    # --------------------------------------------------------
+    # Start all model features as missing
+    # --------------------------------------------------------
+
+    values = {
+        feature: np.nan
+        for feature in FEATURES
+    }
+
+    # ========================================================
+    # Applicant Information
+    # ========================================================
+
+    values["code_gender"] = raw.get(
+        "code_gender",
+        None
+    )
+
+    values["name_education_type"] = raw.get(
+        "name_education_type",
+        None
+    )
+
+    values["name_income_type"] = raw.get(
+        "name_income_type",
+        None
+    )
+
+    values["name_family_status"] = raw.get(
+        "name_family_status",
+        None
+    )
+
+    values["name_housing_type"] = raw.get(
+        "name_housing_type",
+        None
+    )
+
+    values["name_contract_type"] = raw.get(
+        "name_contract_type",
+        None
+    )
+
+    values["name_type_suite"] = raw.get(
+        "name_type_suite",
+        "Unaccompanied"
+    )
+
+    # ========================================================
+    # Ownership
+    # ========================================================
+
+    values["flag_own_car"] = raw.get(
+        "flag_own_car",
+        np.nan
+    )
+
+    values["flag_own_realty"] = raw.get(
+        "flag_own_realty",
+        np.nan
+    )
+
+    # ========================================================
+    # Financial Features
+    # ========================================================
+
+    values["amt_credit"] = credit
+
+    values["amt_annuity"] = annuity
+
+    values["amt_goods_price"] = goods_price
+
+    # ========================================================
+    # Age
+    # ========================================================
+
+    values["age_years"] = age
+
+    if np.isfinite(age):
+        values["days_birth"] = -(
+            age * 365.25
+        )
+
+    # ========================================================
+    # Employment
+    # ========================================================
+
+    values["employment_years"] = employment_years
+
+    if np.isfinite(employment_years):
+        values["days_employed"] = -(
+            employment_years * 365.25
+        )
+
+    # ========================================================
+    # Income Ratios
+    # ========================================================
+
+    if (
+        np.isfinite(income)
+        and income > 0
+    ):
+
+        if np.isfinite(credit):
+
+            values["credit_to_income_ratio"] = (
+                credit / income
+            )
+
+        if np.isfinite(annuity):
+
+            values["annuity_to_income_ratio"] = (
+                annuity / income
+            )
+
+    # ========================================================
+    # External Credit Scores
+    # ========================================================
+
+    ext1 = safe_float(
+        raw.get("ext_source_1")
+    )
+
+    ext2 = safe_float(
+        raw.get("ext_source_2")
+    )
+
+    ext3 = safe_float(
+        raw.get("ext_source_3")
+    )
+
+    values["ext_source_1"] = ext1
+
+    values["ext_source_2"] = ext2
+
+    values["ext_source_3"] = ext3
+
+    external_scores = [
+        score
+        for score in [ext1, ext2, ext3]
+        if np.isfinite(score)
+    ]
+
+    if external_scores:
+
+        values["ext_source_mean"] = (
+            sum(external_scores)
+            / len(external_scores)
+        )
+
+    # ========================================================
+    # Document Flag
+    # ========================================================
+
+    values["flag_document_3"] = raw.get(
+        "flag_document_3",
+        0
+    )
+
+    # ========================================================
+    # Region Information
+    # ========================================================
+
+    values["region_rating_client"] = raw.get(
+        "region_rating_client",
+        np.nan
+    )
+
+    values["region_rating_client_w_city"] = raw.get(
+        "region_rating_client_w_city",
+        np.nan
+    )
+
+    # ========================================================
+    # Final Feature Contract
+    # ========================================================
+
+    final_features = {
+        feature: values.get(
+            feature,
+            np.nan
+        )
+        for feature in FEATURES
+    }
+
+    return final_features
+
+
+# ============================================================
+# Risk Interpretation
+# ============================================================
+
+def risk_result(
+    probability: float
+) -> Dict[str, str]:
+
+    if probability >= 0.70:
+
+        return {
+            "level": "HIGH RISK",
+            "message": (
+                "The applicant has a high probability "
+                "of repayment difficulty."
+            ),
+        }
+
+    elif probability >= 0.40:
+
+        return {
+            "level": "MEDIUM RISK",
+            "message": (
+                "The applicant has a moderate probability "
+                "of repayment difficulty."
+            ),
+        }
+
+    else:
+
+        return {
+            "level": "LOW RISK",
+            "message": (
+                "The applicant has a relatively low "
+                "probability of repayment difficulty."
+            ),
+        }
+
+
+# ============================================================
+# Streamlit Page Configuration
+# ============================================================
 
 st.set_page_config(
     page_title="Home Credit Risk Prediction",
@@ -12,284 +424,753 @@ st.set_page_config(
     layout="wide",
 )
 
-API_URL = os.getenv("API_URL", "http://localhost:8000")
-FEATURE_FILE = Path("reports/recommended_features.json")
 
-# The UI presents human-friendly fields and sends the model's 50 selected
-# features to the FastAPI prediction endpoint.
-FEATURES = [
-    "ext_source_mean", "name_education_type", "name_income_type", "code_gender",
-    "name_housing_type", "flag_own_car", "name_family_status", "ext_source_3",
-    "name_type_suite", "name_contract_type", "installment_late_payment_rate",
-    "ext_source_2", "region_rating_client", "credit_card_avg_utilization",
-    "pos_cash_loan_count", "previous_refusal_rate", "previous_avg_credit_application_ratio",
-    "flag_document_3", "flag_own_realty", "credit_card_avg_balance", "employment_years",
-    "age_years", "amt_goods_price", "credit_card_max_utilization", "def_30_cnt_social_circle",
-    "ext_source_1", "def_60_cnt_social_circle", "amt_credit", "region_rating_client_w_city",
-    "installment_avg_payment_ratio", "installment_previous_loans", "amt_annuity",
-    "pos_cash_history_months", "days_birth", "previous_avg_annuity", "installment_total_records",
-    "pos_cash_active_count", "installment_max_payment_delay", "bureau_avg_days_credit",
-    "previous_approval_rate", "bureau_total_debt", "annuity_to_income_ratio",
-    "bureau_total_overdue", "days_last_phone_change", "bureau_total_credit",
-    "bureau_total_accounts", "days_employed", "credit_to_income_ratio",
-    "installment_late_payment_count", "previous_avg_credit_amount",
-]
+# ============================================================
+# Header
+# ============================================================
 
-LABELS = {
-    "amt_income_total": "Annual Income",
-    "amt_credit": "Credit Amount",
-    "amt_annuity": "Loan Annuity",
-    "amt_goods_price": "Goods Price",
-    "age_years": "Age (years)",
-    "employment_years": "Employment (years)",
-    "ext_source_1": "External Score 1",
-    "ext_source_2": "External Score 2",
-    "ext_source_3": "External Score 3",
-    "ext_source_mean": "External Score Average",
-}
+st.title(
+    "🏦 Home Credit Risk Prediction"
+)
 
-CATEGORIES = {
-    "code_gender": ["M", "F"],
-    "flag_own_car": [0, 1],
-    "flag_own_realty": [0, 1],
-    "flag_document_3": [0, 1],
-    "name_contract_type": ["Cash loans", "Revolving loans"],
-    "name_income_type": ["Working", "Commercial associate", "Pensioner", "State servant", "Student", "Other"],
-    "name_education_type": ["Secondary / secondary special", "Higher education", "Incomplete higher", "Lower secondary", "Academic degree"],
-    "name_family_status": ["Married", "Single / not married", "Civil marriage", "Separated", "Widow", "Unknown"],
-    "name_housing_type": ["House / apartment", "With parents", "Rented apartment", "Municipal apartment", "Office apartment", "Co-op apartment"],
-    "name_type_suite": ["Unaccompanied", "Family", "Spouse, partner", "Children", "Other_A", "Other_B", "Group of people"],
-}
+st.write(
+    "Enter the applicant's basic information below "
+    "to estimate their credit risk."
+)
+
+st.info(
+    "Only information normally collected during a "
+    "loan application is required. Historical credit, "
+    "payment and loan information is handled by the "
+    "model's preprocessing pipeline."
+)
 
 
-def safe_float(value, default=0.0):
+# ============================================================
+# Sidebar - API Status
+# ============================================================
+
+with st.sidebar:
+
+    st.header("System Status")
+
     try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
 
+        health_response = requests.get(
+            f"{API_URL}/health",
+            timeout=3
+        )
 
-def calculate_features(raw):
-    income = max(safe_float(raw.get("amt_income_total")), 1.0)
-    family = max(safe_float(raw.get("cnt_fam_members"), 1.0), 1.0)
-    credit = safe_float(raw.get("amt_credit"))
-    annuity = safe_float(raw.get("amt_annuity"))
+        if health_response.status_code == 200:
 
-    values = dict(raw)
-    values["age_years"] = safe_float(raw.get("age_years"))
-    values["employment_years"] = safe_float(raw.get("employment_years"))
-    values["credit_to_income_ratio"] = credit / income
-    values["annuity_to_income_ratio"] = annuity / income
-    values["income_per_family_member"] = income / family
+            health_data = (
+                health_response.json()
+            )
 
-    ext = [safe_float(raw.get(k), 0.0) for k in ("ext_source_1", "ext_source_2", "ext_source_3")]
-    values["ext_source_mean"] = sum(ext) / 3.0
-    return {feature: values.get(feature, 0) for feature in FEATURES}
+            st.success(
+                "API Connected"
+            )
 
+            st.caption(
+                "Model: "
+                + str(
+                    health_data.get(
+                        "model_type",
+                        "XGBoost"
+                    )
+                )
+            )
 
-def field(label, key, default=0.0, step=0.01, min_value=None, max_value=None):
-    kwargs = {"label": label, "value": default, "step": step}
-    if min_value is not None:
-        kwargs["min_value"] = min_value
-    if max_value is not None:
-        kwargs["max_value"] = max_value
-    return st.number_input(**kwargs)
+        else:
 
+            st.error(
+                "API is not responding correctly."
+            )
 
-def select(label, key, options, index=0):
-    return st.selectbox(label, options, index=index)
+    except requests.RequestException:
 
-
-def build_form():
-    raw = {}
-
-    st.subheader("👤 Applicant Profile")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        raw["code_gender"] = select("Gender", "gender", CATEGORIES["code_gender"])
-        raw["cnt_children"] = field("Number of Children", "children", 0.0, 1.0, 0.0)
-        raw["cnt_fam_members"] = field("Family Members", "family", 2.0, 1.0, 1.0)
-    with c2:
-        raw["name_education_type"] = select("Education", "education", CATEGORIES["name_education_type"], 0)
-        raw["name_family_status"] = select("Family Status", "family_status", CATEGORIES["name_family_status"], 0)
-        raw["name_type_suite"] = select("Type of Suite", "suite", CATEGORIES["name_type_suite"], 0)
-    with c3:
-        raw["name_income_type"] = select("Income Type", "income_type", CATEGORIES["name_income_type"], 0)
-        raw["name_housing_type"] = select("Housing Type", "housing", CATEGORIES["name_housing_type"], 0)
-        raw["name_contract_type"] = select("Contract Type", "contract", CATEGORIES["name_contract_type"], 0)
-
-    st.subheader("💰 Financial Profile")
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        raw["amt_income_total"] = field("Annual Income", "income", 180000.0, 1000.0, 0.0)
-    with c2:
-        raw["amt_credit"] = field("Credit Amount", "credit", 500000.0, 1000.0, 0.0)
-    with c3:
-        raw["amt_annuity"] = field("Loan Annuity", "annuity", 25000.0, 500.0, 0.0)
-    with c4:
-        raw["amt_goods_price"] = field("Goods Price", "goods", 450000.0, 1000.0, 0.0)
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        raw["age_years"] = field("Age (years)", "age", 35.0, 1.0, 18.0, 100.0)
-    with c2:
-        raw["employment_years"] = field("Employment (years)", "employment", 5.0, 0.5, 0.0, 60.0)
-    with c3:
-        raw["days_last_phone_change"] = field("Days Since Phone Change", "phone_change", 100.0, 1.0)
-
-    st.subheader("📊 External Credit Signals")
-    c1, c2, c3 = st.columns(3)
-    for col, key in zip((c1, c2, c3), ("ext_source_1", "ext_source_2", "ext_source_3")):
-        with col:
-            raw[key] = field(LABELS[key], key, 0.50, 0.01, 0.0, 1.0)
-
-    st.subheader("🏦 Credit & Bureau History")
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        raw["bureau_total_accounts"] = field("Bureau Accounts", "bureau_accounts", 5.0, 1.0, 0.0)
-    with c2:
-        raw["bureau_total_credit"] = field("Bureau Total Credit", "bureau_credit", 250000.0, 1000.0, 0.0)
-    with c3:
-        raw["bureau_total_debt"] = field("Bureau Total Debt", "bureau_debt", 80000.0, 1000.0, 0.0)
-    with c4:
-        raw["bureau_total_overdue"] = field("Bureau Overdue", "bureau_overdue", 0.0, 100.0, 0.0)
-
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        raw["bureau_avg_days_credit"] = field("Avg. Credit Age (days)", "bureau_age", -800.0, 10.0)
-    with c2:
-        raw["previous_approval_rate"] = field("Previous Approval Rate", "approval_rate", 0.60, 0.01, 0.0, 1.0)
-    with c3:
-        raw["previous_refusal_rate"] = field("Previous Refusal Rate", "refusal_rate", 0.20, 0.01, 0.0, 1.0)
-    with c4:
-        raw["previous_avg_credit_amount"] = field("Previous Avg. Credit", "previous_credit", 200000.0, 1000.0, 0.0)
-
-    st.subheader("💳 Payment Behaviour")
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        raw["installment_late_payment_rate"] = field("Installment Late Rate", "late_rate", 0.10, 0.01, 0.0, 1.0)
-    with c2:
-        raw["installment_avg_payment_ratio"] = field("Payment Ratio", "payment_ratio", 0.95, 0.01, 0.0, 2.0)
-    with c3:
-        raw["installment_previous_loans"] = field("Previous Loans", "installment_loans", 3.0, 1.0, 0.0)
-    with c4:
-        raw["installment_total_records"] = field("Installment Records", "installment_records", 20.0, 1.0, 0.0)
-
-    st.subheader("💳 Credit Card & POS Cash")
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        raw["credit_card_avg_utilization"] = field("Card Avg. Utilization", "card_util", 0.30, 0.01, 0.0, 5.0)
-    with c2:
-        raw["credit_card_max_utilization"] = field("Card Max Utilization", "card_max_util", 0.60, 0.01, 0.0, 10.0)
-    with c3:
-        raw["credit_card_avg_balance"] = field("Card Avg. Balance", "card_balance", 50000.0, 1000.0, 0.0)
-    with c4:
-        raw["pos_cash_loan_count"] = field("POS Cash Loans", "pos_loans", 2.0, 1.0, 0.0)
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        raw["pos_cash_history_months"] = field("POS History (months)", "pos_history", 12.0, 1.0, 0.0)
-    with c2:
-        raw["pos_cash_active_count"] = field("Active POS Loans", "pos_active", 1.0, 1.0, 0.0)
-    with c3:
-        raw["installment_max_payment_delay"] = field("Max Payment Delay (days)", "max_delay", 5.0, 1.0)
-
-    st.subheader("⚙️ Other Indicators")
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        raw["region_rating_client"] = field("Region Rating", "region_rating", 2.0, 1.0, 1.0, 3.0)
-    with c2:
-        raw["region_rating_client_w_city"] = field("Region/City Rating", "region_city", 2.0, 1.0, 1.0, 3.0)
-    with c3:
-        raw["def_30_cnt_social_circle"] = field("30-Day Social Defaults", "social30", 0.0, 1.0, 0.0)
-    with c4:
-        raw["def_60_cnt_social_circle"] = field("60-Day Social Defaults", "social60", 0.0, 1.0, 0.0)
-
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        raw["flag_own_car"] = select("Owns Car", "car", [0, 1])
-    with c2:
-        raw["flag_own_realty"] = select("Owns Property", "realty", [0, 1])
-    with c3:
-        raw["flag_document_3"] = select("Document 3 Flag", "doc3", [0, 1])
-    with c4:
-        raw["days_employed"] = field("Days Employed", "days_employed", -1800.0, 10.0)
-
-    return calculate_features(raw)
-
-
-def risk_result(result):
-    probability = float(result["default_probability"])
-    percent = probability * 100
-    risk = str(result["risk_level"]).upper()
+        st.error(
+            "API is offline. Start FastAPI "
+            "before making a prediction."
+        )
 
     st.divider()
-    st.subheader("🎯 Prediction Result")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.metric("Default Probability", f"{percent:.2f}%")
-    with c2:
-        st.metric("Risk Level", risk)
-    with c3:
-        st.metric("Prediction Class", result["predicted_class"])
-
-    st.progress(min(max(probability, 0.0), 1.0), text=f"Risk probability: {percent:.2f}%")
-
-    if risk == "HIGH":
-        st.error("⚠️ High Risk — the model predicts a higher probability of repayment difficulty.")
-    else:
-        st.success("✅ Low Risk — the model predicts a lower probability of repayment difficulty.")
 
     st.caption(
-        f"Model threshold: {result['threshold']:.2f} | "
-        f"Features supplied: {result['supplied_feature_count']} | "
-        f"Missing features: {result['missing_feature_count']}"
+        "Home Credit Risk Detection Model"
     )
 
 
-def main():
-    st.markdown("# 🏦 Home Credit Risk Prediction")
-    st.markdown("### AI-powered applicant repayment-risk assessment")
+# ============================================================
+# Applicant Information
+# ============================================================
 
-    with st.sidebar:
-        st.header("⚙️ Model Connection")
-        api_url = st.text_input("FastAPI URL", API_URL).rstrip("/")
-        st.info("The UI sends the selected 50 model features to the FastAPI prediction endpoint.")
-        if st.button("Check API"):
-            try:
-                response = requests.get(f"{api_url}/health", timeout=5)
-                if response.ok:
-                    st.success("API is healthy")
-                else:
-                    st.error(f"API returned {response.status_code}")
-            except requests.RequestException as exc:
-                st.error(f"API unavailable: {exc}")
+st.header(
+    "👤 Applicant Information"
+)
 
-    applicant_id = st.number_input("Applicant ID (optional)", min_value=0, value=100001, step=1)
-    features = build_form()
+col1, col2, col3 = st.columns(3)
 
-    st.divider()
-    left, center, right = st.columns([1, 1, 1])
-    with center:
-        predict_clicked = st.button("🔍 PREDICT CREDIT RISK", type="primary", use_container_width=True)
 
-    if predict_clicked:
-        payload = {"applicant_id": int(applicant_id), "features": features}
+with col1:
+
+    gender = st.selectbox(
+        "Gender",
+        [
+            "M",
+            "F",
+        ],
+        index=1,
+    )
+
+    age = st.number_input(
+        "Age (years)",
+        min_value=18,
+        max_value=80,
+        value=30,
+        step=1,
+    )
+
+    education = st.selectbox(
+        "Education",
+        [
+            "Secondary / secondary special",
+            "Higher education",
+            "Incomplete higher",
+            "Lower secondary",
+            "Academic degree",
+        ],
+    )
+
+
+with col2:
+
+    family_status = st.selectbox(
+        "Family Status",
+        [
+            "Married",
+            "Single / not married",
+            "Civil marriage",
+            "Separated",
+            "Widow",
+        ],
+    )
+
+    income_type = st.selectbox(
+        "Income Type",
+        [
+            "Working",
+            "Commercial associate",
+            "Pensioner",
+            "State servant",
+            "Student",
+            "Unemployed",
+            "Businessman",
+            "Maternity leave",
+        ],
+    )
+
+    housing_type = st.selectbox(
+        "Housing Type",
+        [
+            "House / apartment",
+            "With parents",
+            "Municipal apartment",
+            "Rented apartment",
+            "Office apartment",
+            "Co-op apartment",
+        ],
+    )
+
+
+with col3:
+
+    contract_type = st.selectbox(
+        "Contract Type",
+        [
+            "Cash loans",
+            "Revolving loans",
+        ],
+    )
+
+    own_car = st.selectbox(
+        "Own a Car?",
+        [
+            "No",
+            "Yes",
+        ],
+    )
+
+    own_realty = st.selectbox(
+        "Own Property?",
+        [
+            "Yes",
+            "No",
+        ],
+    )
+
+
+# ============================================================
+# Financial Information
+# ============================================================
+
+st.header(
+    "💰 Financial Information"
+)
+
+col1, col2, col3, col4 = st.columns(4)
+
+
+with col1:
+
+    income = st.number_input(
+        "Annual Income",
+        min_value=10000.0,
+        value=500000.0,
+        step=10000.0,
+        help="Applicant's total annual income.",
+    )
+
+
+with col2:
+
+    credit = st.number_input(
+        "Requested Credit Amount",
+        min_value=1000.0,
+        value=300000.0,
+        step=10000.0,
+        help="Amount of credit requested.",
+    )
+
+
+with col3:
+
+    annuity = st.number_input(
+        "Loan Annuity / EMI",
+        min_value=100.0,
+        value=20000.0,
+        step=1000.0,
+        help="Expected periodic loan payment.",
+    )
+
+
+with col4:
+
+    goods_price = st.number_input(
+        "Goods / Purchase Price",
+        min_value=1000.0,
+        value=300000.0,
+        step=10000.0,
+        help="Approximate price of the financed goods or asset.",
+    )
+
+
+# ============================================================
+# Employment Information
+# ============================================================
+
+st.header(
+    "💼 Employment Information"
+)
+
+employment_years = st.number_input(
+    "Employment Experience (years)",
+    min_value=0.0,
+    max_value=60.0,
+    value=5.0,
+    step=0.5,
+)
+
+
+# ============================================================
+# External Credit Information
+# ============================================================
+
+st.header(
+    "📊 External Credit Information"
+)
+
+st.caption(
+    "Enter external credit scores if they are available. "
+    "Scores should normally be between 0 and 1."
+)
+
+col1, col2, col3 = st.columns(3)
+
+
+with col1:
+
+    ext_source_1 = st.number_input(
+        "External Credit Score 1",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.0,
+        step=0.01,
+    )
+
+
+with col2:
+
+    ext_source_2 = st.number_input(
+        "External Credit Score 2",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.0,
+        step=0.01,
+    )
+
+
+with col3:
+
+    ext_source_3 = st.number_input(
+        "External Credit Score 3",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.0,
+        step=0.01,
+    )
+
+
+# ============================================================
+# Optional Bank Information
+# ============================================================
+
+with st.expander(
+    "🏦 Optional Bank Information"
+):
+
+    st.caption(
+        "These fields can be populated by a bank employee "
+        "when the information is available."
+    )
+
+    col1, col2 = st.columns(2)
+
+
+    with col1:
+
+        region_rating = st.selectbox(
+            "Region Rating",
+            [
+                "Not Available",
+                "1",
+                "2",
+                "3",
+            ],
+        )
+
+
+    with col2:
+
+        region_rating_city = st.selectbox(
+            "Region Rating with City",
+            [
+                "Not Available",
+                "1",
+                "2",
+                "3",
+            ],
+        )
+
+
+# ============================================================
+# Raw Applicant Input
+# ============================================================
+
+raw_input = {
+
+    # Applicant
+    "code_gender": gender,
+
+    "name_education_type": education,
+
+    "name_family_status": family_status,
+
+    "name_income_type": income_type,
+
+    "name_housing_type": housing_type,
+
+    "name_contract_type": contract_type,
+
+    "name_type_suite": "Unaccompanied",
+
+    # Ownership
+    "flag_own_car": (
+        1
+        if own_car == "Yes"
+        else 0
+    ),
+
+    "flag_own_realty": (
+        1
+        if own_realty == "Yes"
+        else 0
+    ),
+
+    # Financial
+    "amt_income_total": income,
+
+    "amt_credit": credit,
+
+    "amt_annuity": annuity,
+
+    "amt_goods_price": goods_price,
+
+    # Age
+    "age_years": age,
+
+    # Employment
+    "employment_years": employment_years,
+
+    # External credit
+    "ext_source_1": ext_source_1,
+
+    "ext_source_2": ext_source_2,
+
+    "ext_source_3": ext_source_3,
+
+    # Document
+    "flag_document_3": 0,
+
+    # Region
+    "region_rating_client": (
+        np.nan
+        if region_rating == "Not Available"
+        else float(region_rating)
+    ),
+
+    "region_rating_client_w_city": (
+        np.nan
+        if region_rating_city == "Not Available"
+        else float(region_rating_city)
+    ),
+}
+
+
+# ============================================================
+# Prediction Button
+# ============================================================
+
+st.divider()
+
+predict_button = st.button(
+    "🔍 Check Credit Risk",
+    type="primary",
+    use_container_width=True,
+)
+
+
+# ============================================================
+# Prediction
+# ============================================================
+
+if predict_button:
+
+    # --------------------------------------------------------
+    # Validation
+    # --------------------------------------------------------
+
+    if income <= 0:
+
+        st.error(
+            "Annual income must be greater than zero."
+        )
+
+        st.stop()
+
+
+    if credit <= 0:
+
+        st.error(
+            "Credit amount must be greater than zero."
+        )
+
+        st.stop()
+
+
+    if annuity <= 0:
+
+        st.error(
+            "Loan annuity / EMI must be greater than zero."
+        )
+
+        st.stop()
+
+
+    # --------------------------------------------------------
+    # Generate model features
+    # --------------------------------------------------------
+
+    features = calculate_features(
+        raw_input
+    )
+
+
+    # --------------------------------------------------------
+    # Verify exactly 50 features
+    # --------------------------------------------------------
+
+    if len(features) != 50:
+
+        st.error(
+            "Model input error: expected 50 features, "
+            f"but generated {len(features)}."
+        )
+
+        st.stop()
+
+
+    if set(features.keys()) != set(FEATURES):
+
+        st.error(
+            "Model feature mismatch detected."
+        )
+
+        st.stop()
+
+
+    # --------------------------------------------------------
+    # Convert NaN / Infinity to JSON-safe null
+    # --------------------------------------------------------
+
+    json_safe_features = (
+        make_features_json_safe(
+            features
+        )
+    )
+
+
+    # --------------------------------------------------------
+    # Final payload
+    # --------------------------------------------------------
+
+    payload = {
+        "features": json_safe_features
+    }
+
+
+    # --------------------------------------------------------
+    # Prediction API
+    # --------------------------------------------------------
+
+    with st.spinner(
+        "Analyzing applicant credit risk..."
+    ):
+
         try:
-            with st.spinner("Running XGBoost prediction..."):
-                response = requests.post(f"{api_url}/predict", json=payload, timeout=30)
-            if response.ok:
-                risk_result(response.json())
-            else:
-                st.error(f"Prediction failed ({response.status_code})")
-                st.json(response.json())
+
+            response = requests.post(
+                f"{API_URL}/predict",
+                json=payload,
+                timeout=30,
+            )
+
         except requests.RequestException as exc:
-            st.error(f"Could not connect to FastAPI: {exc}")
 
-    with st.expander("🔧 Model Feature Payload"):
-        st.caption(f"Exactly {len(FEATURES)} selected model features are sent to the API.")
-        st.dataframe(pd.DataFrame({"Feature": FEATURES, "Value": [features[f] for f in FEATURES]}), use_container_width=True, hide_index=True)
+            st.error(
+                "Unable to connect to the prediction API."
+            )
+
+            st.code(
+                str(exc)
+            )
+
+            st.stop()
 
 
-if __name__ == "__main__":
-    main()
+    # --------------------------------------------------------
+    # Handle API errors
+    # --------------------------------------------------------
+
+    if response.status_code != 200:
+
+        st.error(
+            f"Prediction failed "
+            f"(HTTP {response.status_code})."
+        )
+
+        try:
+
+            st.json(
+                response.json()
+            )
+
+        except ValueError:
+
+            st.code(
+                response.text
+            )
+
+        st.stop()
+
+
+    # --------------------------------------------------------
+    # Parse response
+    # --------------------------------------------------------
+
+    try:
+
+        result = response.json()
+
+    except ValueError:
+
+        st.error(
+            "The API returned an invalid response."
+        )
+
+        st.stop()
+
+
+    # --------------------------------------------------------
+    # Extract prediction
+    # --------------------------------------------------------
+
+    probability = safe_float(
+        result.get(
+            "default_probability"
+        ),
+        default=np.nan
+    )
+
+    predicted_class = result.get(
+        "predicted_class"
+    )
+
+
+    if not np.isfinite(probability):
+
+        st.error(
+            "The API returned an invalid "
+            "default probability."
+        )
+
+        st.stop()
+
+
+    # --------------------------------------------------------
+    # Risk assessment
+    # --------------------------------------------------------
+
+    risk = risk_result(
+        probability
+    )
+
+
+    st.header(
+        "📋 Credit Risk Assessment"
+    )
+
+
+    col1, col2, col3 = st.columns(3)
+
+
+    with col1:
+
+        st.metric(
+            "Default Probability",
+            f"{probability * 100:.2f}%"
+        )
+
+
+    with col2:
+
+        st.metric(
+            "Prediction",
+            (
+                "Higher Risk"
+                if predicted_class == 1
+                else "Lower Risk"
+            )
+        )
+
+
+    with col3:
+
+        st.metric(
+            "Risk Level",
+            risk["level"]
+        )
+
+
+    # --------------------------------------------------------
+    # Risk message
+    # --------------------------------------------------------
+
+    if risk["level"] == "HIGH RISK":
+
+        st.error(
+            f"⚠️ {risk['message']}"
+        )
+
+    elif risk["level"] == "MEDIUM RISK":
+
+        st.warning(
+            f"⚠️ {risk['message']}"
+        )
+
+    else:
+
+        st.success(
+            f"✅ {risk['message']}"
+        )
+
+
+    # --------------------------------------------------------
+    # Recommendation
+    # --------------------------------------------------------
+
+    st.subheader(
+        "🏦 Recommendation"
+    )
+
+
+    if probability >= 0.70:
+
+        st.write(
+            "The application should undergo additional "
+            "credit review. Consider verifying income, "
+            "existing liabilities and credit history "
+            "before approving the loan."
+        )
+
+    elif probability >= 0.40:
+
+        st.write(
+            "The application shows moderate risk. "
+            "Additional verification of the applicant's "
+            "financial and credit history is recommended."
+        )
+
+    else:
+
+        st.write(
+            "The application shows relatively low risk "
+            "according to the model. Normal credit "
+            "approval procedures can be followed."
+        )
+
+
+    # --------------------------------------------------------
+    # Technical details
+    # --------------------------------------------------------
+
+    with st.expander(
+        "🔧 Technical Details"
+    ):
+
+        st.write(
+            "Features sent to model:",
+            len(features)
+        )
+
+        st.write(
+            "API endpoint:",
+            f"{API_URL}/predict"
+        )
+
+        st.write(
+            "Historical model features that are not "
+            "available from the application form are "
+            "sent as null and handled by the model's "
+            "preprocessing pipeline."
+        )

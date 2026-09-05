@@ -32,7 +32,7 @@ from app.schemas import (
 MODEL_PATH = Path(
     os.getenv(
         "MODEL_PATH",
-        "models/xgboost_model.joblib",
+        "models/xgboost_home_credit_pipeline.joblib",
     )
 )
 
