@@ -19,14 +19,10 @@ from config import (
 # ============================================================
 
 def load_csv(path):
-    """
-    Load CSV and normalize column names.
-    """
+    """Load CSV and normalize column names."""
 
     if not path.exists():
-        raise FileNotFoundError(
-            f"File not found: {path}"
-        )
+        raise FileNotFoundError(f"File not found: {path}")
 
     df = pd.read_csv(path)
 
@@ -43,11 +39,7 @@ def safe_divide(
     numerator: pd.Series,
     denominator: pd.Series,
 ) -> pd.Series:
-    """
-    Safe division.
-
-    Zero denominators are converted to NaN.
-    """
+    """Perform division while safely handling zero denominators."""
 
     denominator = denominator.replace(0, np.nan)
 
@@ -68,6 +60,16 @@ def create_application_features(
 ) -> pd.DataFrame:
     """
     Create applicant-level application features.
+
+    Focus:
+    - Applicant profile
+    - Income
+    - Requested credit
+    - Loan burden
+    - External credit indicators
+    - Basic social/document indicators
+
+    Goods / purchase price is intentionally excluded.
     """
 
     df = application_df.copy()
@@ -77,7 +79,7 @@ def create_application_features(
     # --------------------------------------------------------
 
     df["age_years"] = (
-        (-df["days_birth"]) / 365.25
+        -df["days_birth"] / 365.25
     )
 
     # --------------------------------------------------------
@@ -85,14 +87,13 @@ def create_application_features(
     # --------------------------------------------------------
 
     df["employment_years"] = (
-        (-df["days_employed"]) / 365.25
+        -df["days_employed"] / 365.25
     )
 
-    # Home Credit sometimes contains anomalous
-    # employment values.
+    # Home Credit contains anomalous employment values.
     df.loc[
         df["employment_years"] > 100,
-        "employment_years"
+        "employment_years",
     ] = np.nan
 
     # --------------------------------------------------------
@@ -133,15 +134,16 @@ def create_application_features(
     ]
 
     existing_ext_columns = [
-        col
-        for col in ext_columns
+        col for col in ext_columns
         if col in df.columns
     ]
 
-    df["ext_source_mean"] = (
-        df[existing_ext_columns]
-        .mean(axis=1)
-    )
+    if existing_ext_columns:
+        df["ext_source_mean"] = (
+            df[existing_ext_columns].mean(axis=1)
+        )
+    else:
+        df["ext_source_mean"] = np.nan
 
     # --------------------------------------------------------
     # Selected application columns
@@ -151,57 +153,56 @@ def create_application_features(
         "sk_id_curr",
         "target",
 
+        # Applicant profile
         "name_contract_type",
         "code_gender",
-
         "flag_own_car",
         "flag_own_realty",
-
         "cnt_children",
         "cnt_fam_members",
 
+        # Financial information
         "amt_income_total",
         "amt_credit",
         "amt_annuity",
 
-        # Kept out of bank-style feature calculations.
-        # Goods / Purchase Price is not used as a
-        # credit-risk feature.
-        #
-        # "amt_goods_price",
-
+        # Age / employment
         "days_birth",
         "days_employed",
+        "age_years",
+        "employment_years",
 
+        # Applicant characteristics
         "name_income_type",
         "name_education_type",
         "name_family_status",
         "name_housing_type",
         "name_type_suite",
 
+        # Regional indicators
         "region_rating_client",
         "region_rating_client_w_city",
 
+        # External credit indicators
         "ext_source_1",
         "ext_source_2",
         "ext_source_3",
+        "ext_source_mean",
 
+        # Social indicators
         "obs_30_cnt_social_circle",
         "def_30_cnt_social_circle",
         "obs_60_cnt_social_circle",
         "def_60_cnt_social_circle",
 
+        # Other documented risk indicator
         "days_last_phone_change",
-
         "flag_document_3",
 
-        "age_years",
-        "employment_years",
-
+        # Derived financial ratios
         "credit_to_income_ratio",
         "annuity_to_income_ratio",
         "income_per_family_member",
-        "ext_source_mean",
     ]
 
     existing_columns = [
@@ -222,26 +223,22 @@ def create_bureau_features(
 ) -> pd.DataFrame:
     """
     Create applicant-level Bureau features.
+
+    Focus:
+    - Number of historical credit accounts
+    - Active / closed accounts
+    - Total credit exposure
+    - Total debt
+    - Total overdue amount
+
+    credit_active remains categorical and is never converted
+    to numeric.
     """
 
     df = bureau_df.copy()
 
     # --------------------------------------------------------
-    # Ensure required numeric columns exist
-    # --------------------------------------------------------
-    #
-    # IMPORTANT:
-    # credit_active is categorical and MUST NOT be converted
-    # to numeric. It contains values such as:
-    #
-    # ACTIVE
-    # CLOSED
-    # SOLD
-    # BAD DEBT
-    #
-    # Converting it with pd.to_numeric(..., errors="coerce")
-    # would turn these values into NaN and make the active/
-    # closed account flags equal to zero.
+    # Numeric columns
     # --------------------------------------------------------
 
     numeric_columns = [
@@ -259,7 +256,7 @@ def create_bureau_features(
             )
 
     # --------------------------------------------------------
-    # Active / closed accounts
+    # Account status
     # --------------------------------------------------------
 
     status = (
@@ -278,7 +275,7 @@ def create_bureau_features(
     ).astype(int)
 
     # --------------------------------------------------------
-    # Aggregation
+    # Aggregate Bureau information
     # --------------------------------------------------------
 
     grouped = (
@@ -313,16 +310,6 @@ def create_bureau_features(
                 "amt_credit_sum_overdue",
                 "sum",
             ),
-
-            bureau_max_overdue=(
-                "amt_credit_sum_overdue",
-                "max",
-            ),
-
-            bureau_avg_days_credit=(
-                "days_credit",
-                "mean",
-            ),
         )
         .reset_index()
     )
@@ -336,21 +323,29 @@ def create_bureau_features(
 
 def create_previous_application_features(
     previous_df: pd.DataFrame,
-    application_df: pd.DataFrame,
 ) -> pd.DataFrame:
     """
-    Create applicant-level previous application features.
+    Create simple historical application outcome features.
+
+    Only application outcome counts/rates are retained.
+
+    Removed:
+    - Average previous loan amount
+    - Average previous EMI
+    - Previous credit/application ratio
+    - Previous credit-to-income ratio
     """
 
     df = previous_df.copy()
 
     # --------------------------------------------------------
-    # Approval / refusal flags
+    # Application status
     # --------------------------------------------------------
 
     status = (
         df["name_contract_status"]
         .astype(str)
+        .str.strip()
         .str.upper()
     )
 
@@ -363,62 +358,7 @@ def create_previous_application_features(
     ).astype(int)
 
     # --------------------------------------------------------
-    # Numeric conversion
-    # --------------------------------------------------------
-
-    numeric_columns = [
-        "amt_application",
-        "amt_credit",
-        "amt_annuity",
-    ]
-
-    for col in numeric_columns:
-
-        if col in df.columns:
-
-            df[col] = pd.to_numeric(
-                df[col],
-                errors="coerce",
-            )
-
-    # --------------------------------------------------------
-    # Credit / application ratio
-    # --------------------------------------------------------
-
-    df["credit_application_ratio"] = safe_divide(
-        df["amt_credit"],
-        df["amt_application"],
-    )
-
-    # --------------------------------------------------------
-    # Current applicant income
-    # --------------------------------------------------------
-
-    income = (
-        application_df[
-            [
-                "sk_id_curr",
-                "amt_income_total",
-            ]
-        ]
-        .drop_duplicates(
-            "sk_id_curr"
-        )
-    )
-
-    df = df.merge(
-        income,
-        on="sk_id_curr",
-        how="left",
-    )
-
-    df["credit_to_current_income_ratio"] = safe_divide(
-        df["amt_credit"],
-        df["amt_income_total"],
-    )
-
-    # --------------------------------------------------------
-    # Aggregation
+    # Aggregate
     # --------------------------------------------------------
 
     grouped = (
@@ -437,31 +377,6 @@ def create_previous_application_features(
             previous_refused_count=(
                 "refused_flag",
                 "sum",
-            ),
-
-            previous_avg_application_amount=(
-                "amt_application",
-                "mean",
-            ),
-
-            previous_avg_credit_amount=(
-                "amt_credit",
-                "mean",
-            ),
-
-            previous_avg_credit_application_ratio=(
-                "credit_application_ratio",
-                "mean",
-            ),
-
-            previous_avg_annuity=(
-                "amt_annuity",
-                "mean",
-            ),
-
-            previous_avg_credit_to_current_income_ratio=(
-                "credit_to_current_income_ratio",
-                "mean",
             ),
         )
         .reset_index()
@@ -485,127 +400,6 @@ def create_previous_application_features(
 
 
 # ============================================================
-# INSTALLMENT FEATURES
-# ============================================================
-
-def create_installment_features(
-    installments_df: pd.DataFrame,
-) -> pd.DataFrame:
-    """
-    Create repayment behavior features.
-    """
-
-    df = installments_df.copy()
-
-    # --------------------------------------------------------
-    # Numeric conversion
-    # --------------------------------------------------------
-
-    numeric_columns = [
-        "days_instalment",
-        "days_entry_payment",
-        "amt_instalment",
-        "amt_payment",
-    ]
-
-    for col in numeric_columns:
-
-        if col in df.columns:
-
-            df[col] = pd.to_numeric(
-                df[col],
-                errors="coerce",
-            )
-
-    # --------------------------------------------------------
-    # Payment delay
-    # --------------------------------------------------------
-
-    df["payment_delay"] = (
-        df["days_entry_payment"]
-        - df["days_instalment"]
-    )
-
-    # --------------------------------------------------------
-    # Late payment
-    # --------------------------------------------------------
-
-    df["late_payment_flag"] = (
-        df["payment_delay"] > 0
-    ).astype(int)
-
-    # --------------------------------------------------------
-    # Payment ratio
-    # --------------------------------------------------------
-
-    df["payment_ratio"] = safe_divide(
-        df["amt_payment"],
-        df["amt_instalment"],
-    )
-
-    # --------------------------------------------------------
-    # Underpayment
-    # --------------------------------------------------------
-
-    df["underpayment"] = (
-        df["amt_instalment"]
-        - df["amt_payment"]
-    ).clip(lower=0)
-
-    # --------------------------------------------------------
-    # Aggregation
-    # --------------------------------------------------------
-
-    grouped = (
-        df.groupby("sk_id_curr")
-        .agg(
-            installment_total_records=(
-                "sk_id_prev",
-                "count",
-            ),
-
-            installment_previous_loans=(
-                "sk_id_prev",
-                "nunique",
-            ),
-
-            installment_avg_payment_delay=(
-                "payment_delay",
-                "mean",
-            ),
-
-            installment_max_payment_delay=(
-                "payment_delay",
-                "max",
-            ),
-
-            installment_late_payment_count=(
-                "late_payment_flag",
-                "sum",
-            ),
-
-            installment_avg_payment_ratio=(
-                "payment_ratio",
-                "mean",
-            ),
-
-            installment_total_underpayment=(
-                "underpayment",
-                "sum",
-            ),
-        )
-        .reset_index()
-    )
-
-    grouped["installment_late_payment_rate"] = safe_divide(
-        grouped["installment_late_payment_count"],
-        grouped["installment_total_records"],
-    )
-
-    return grouped
-
-
-# ============================================================
 # CREDIT CARD FEATURES
 # ============================================================
 
@@ -613,30 +407,36 @@ def create_credit_card_features(
     credit_card_df: pd.DataFrame,
 ) -> pd.DataFrame:
     """
-    Create applicant-level credit card behavior features.
+    Create limited credit-card exposure features.
+
+    Retained:
+    - Number of credit cards
+    - Average credit limit
+    - Average utilization
+
+    Removed:
+    - Average balance
+    - DPD features
+    - 30+ DPD features
+    - Detailed repayment behavior
     """
 
     df = credit_card_df.copy()
 
     numeric_columns = [
-        "amt_balance",
         "amt_credit_limit_actual",
-        "amt_total_receivable",
-        "sk_dpd",
-        "sk_dpd_def",
+        "amt_balance",
     ]
 
     for col in numeric_columns:
-
         if col in df.columns:
-
             df[col] = pd.to_numeric(
                 df[col],
                 errors="coerce",
             )
 
     # --------------------------------------------------------
-    # Utilization
+    # Credit utilization
     # --------------------------------------------------------
 
     df["utilization"] = safe_divide(
@@ -645,19 +445,7 @@ def create_credit_card_features(
     )
 
     # --------------------------------------------------------
-    # DPD
-    # --------------------------------------------------------
-
-    df["dpd_flag"] = (
-        df["sk_dpd"] > 0
-    ).astype(int)
-
-    df["dpd_30_flag"] = (
-        df["sk_dpd"] >= 30
-    ).astype(int)
-
-    # --------------------------------------------------------
-    # Aggregation
+    # Aggregate
     # --------------------------------------------------------
 
     grouped = (
@@ -666,11 +454,6 @@ def create_credit_card_features(
             credit_card_count=(
                 "sk_id_prev",
                 "nunique",
-            ),
-
-            credit_card_avg_balance=(
-                "amt_balance",
-                "mean",
             ),
 
             credit_card_avg_limit=(
@@ -682,117 +465,35 @@ def create_credit_card_features(
                 "utilization",
                 "mean",
             ),
-
-            credit_card_max_utilization=(
-                "utilization",
-                "max",
-            ),
-
-            credit_card_avg_dpd=(
-                "sk_dpd",
-                "mean",
-            ),
-
-            credit_card_dpd_count=(
-                "dpd_flag",
-                "sum",
-            ),
-
-            credit_card_dpd_30_count=(
-                "dpd_30_flag",
-                "sum",
-            ),
         )
         .reset_index()
     )
-
-    grouped["credit_card_dpd_rate"] = safe_divide(
-        grouped["credit_card_dpd_count"],
-        grouped["credit_card_count"],
-    )
-
-    # --------------------------------------------------------
-    # Final features
-    # --------------------------------------------------------
-
-    grouped = grouped[
-        [
-            "sk_id_curr",
-            "credit_card_count",
-            "credit_card_avg_balance",
-            "credit_card_avg_limit",
-            "credit_card_avg_utilization",
-            "credit_card_max_utilization",
-            "credit_card_avg_dpd",
-            "credit_card_dpd_rate",
-            "credit_card_dpd_30_count",
-        ]
-    ]
 
     return grouped
 
 
 # ============================================================
-# POS CASH FEATURES
+# POS/CASH FEATURES
 # ============================================================
 
 def create_pos_cash_features(
     pos_cash_df: pd.DataFrame,
 ) -> pd.DataFrame:
     """
-    Create applicant-level POS/CASH features.
+    Create a minimal POS/CASH history feature.
+
+    Only the number of historical POS/CASH loans is retained.
+
+    Detailed:
+    - DPD
+    - 30+ DPD
+    - active/completed behavior
+    - repayment behavior
+
+    are intentionally excluded.
     """
 
     df = pos_cash_df.copy()
-
-    numeric_columns = [
-        "sk_dpd",
-        "sk_dpd_def",
-        "months_balance",
-    ]
-
-    for col in numeric_columns:
-
-        if col in df.columns:
-
-            df[col] = pd.to_numeric(
-                df[col],
-                errors="coerce",
-            )
-
-    # --------------------------------------------------------
-    # DPD flags
-    # --------------------------------------------------------
-
-    df["dpd_flag"] = (
-        df["sk_dpd"] > 0
-    ).astype(int)
-
-    df["dpd_30_flag"] = (
-        df["sk_dpd"] >= 30
-    ).astype(int)
-
-    # --------------------------------------------------------
-    # Active / completed
-    # --------------------------------------------------------
-
-    status = (
-        df["name_contract_status"]
-        .astype(str)
-        .str.upper()
-    )
-
-    df["active_flag"] = (
-        status == "ACTIVE"
-    ).astype(int)
-
-    df["completed_flag"] = (
-        status == "COMPLETED"
-    ).astype(int)
-
-    # --------------------------------------------------------
-    # Aggregation
-    # --------------------------------------------------------
 
     grouped = (
         df.groupby("sk_id_curr")
@@ -801,67 +502,9 @@ def create_pos_cash_features(
                 "sk_id_prev",
                 "nunique",
             ),
-
-            pos_cash_history_months=(
-                "months_balance",
-                "count",
-            ),
-
-            pos_cash_avg_dpd=(
-                "sk_dpd",
-                "mean",
-            ),
-
-            pos_cash_max_dpd=(
-                "sk_dpd",
-                "max",
-            ),
-
-            pos_cash_dpd_count=(
-                "dpd_flag",
-                "sum",
-            ),
-
-            pos_cash_dpd_30_count=(
-                "dpd_30_flag",
-                "sum",
-            ),
-
-            pos_cash_active_count=(
-                "active_flag",
-                "sum",
-            ),
-
-            pos_cash_completed_count=(
-                "completed_flag",
-                "sum",
-            ),
         )
         .reset_index()
     )
-
-    grouped["pos_cash_dpd_rate"] = safe_divide(
-        grouped["pos_cash_dpd_count"],
-        grouped["pos_cash_history_months"],
-    )
-
-    # --------------------------------------------------------
-    # Final features
-    # --------------------------------------------------------
-
-    grouped = grouped[
-        [
-            "sk_id_curr",
-            "pos_cash_loan_count",
-            "pos_cash_history_months",
-            "pos_cash_avg_dpd",
-            "pos_cash_max_dpd",
-            "pos_cash_dpd_rate",
-            "pos_cash_dpd_30_count",
-            "pos_cash_active_count",
-            "pos_cash_completed_count",
-        ]
-    ]
 
     return grouped
 
@@ -874,26 +517,19 @@ def add_bank_style_features(
     features: pd.DataFrame,
 ) -> pd.DataFrame:
     """
-    Add business-friendly credit-risk features using only
-    fields available in the consolidated Home Credit dataset.
+    Add business-friendly credit-risk ratios.
 
-    Important unit conventions:
+    Features:
+    - Monthly gross income
+    - Loan annuity / monthly income
+    - Bureau debt / annual income
+    - Bureau overdue / annual income
+    - Bureau credit / annual income
+    - Active bureau account ratio
+    - Credit-card utilization
 
-    - amt_income_total is treated as annual gross income.
-    - amt_annuity is the loan annuity amount from application data.
-    - These are dataset-derived features.
-    - They are NOT manually entered customer values such as
-      credit score, household expenses, or applicant's existing EMI.
-
-    Features added:
-
-    1. monthly_gross_income
-    2. loan_annuity_to_monthly_income_ratio
-    3. bureau_debt_to_annual_income_ratio
-    4. bureau_overdue_to_annual_income_ratio
-    5. bureau_credit_to_annual_income_ratio
-    6. active_bureau_account_ratio
-    7. credit_card_balance_to_monthly_income_ratio
+    No manually invented credit score, household expenses,
+    existing EMI, or purchase-price information is used.
     """
 
     # --------------------------------------------------------
@@ -905,7 +541,6 @@ def add_bank_style_features(
         .replace(0, np.nan)
     )
 
-    # Annual income -> monthly gross income
     features["monthly_gross_income"] = (
         income / 12.0
     )
@@ -927,7 +562,7 @@ def add_bank_style_features(
     )
 
     # --------------------------------------------------------
-    # Existing bureau debt burden
+    # Bureau debt burden
     # --------------------------------------------------------
 
     features[
@@ -949,7 +584,7 @@ def add_bank_style_features(
     )
 
     # --------------------------------------------------------
-    # Total bureau credit exposure
+    # Bureau credit exposure
     # --------------------------------------------------------
 
     features[
@@ -975,17 +610,6 @@ def add_bank_style_features(
         bureau_accounts,
     )
 
-    # --------------------------------------------------------
-    # Credit card balance / monthly income
-    # --------------------------------------------------------
-
-    features[
-        "credit_card_balance_to_monthly_income_ratio"
-    ] = safe_divide(
-        features["credit_card_avg_balance"],
-        monthly_income,
-    )
-
     return features
 
 
@@ -1003,6 +627,10 @@ def build_feature_dataset(
 ) -> pd.DataFrame:
     """
     Build the complete applicant-level feature dataset.
+
+    Installments and POS/CASH are accepted for compatibility
+    with the existing pipeline. Detailed repayment behavior
+    is intentionally not included in the production feature set.
     """
 
     print("Creating application features...")
@@ -1031,14 +659,11 @@ def build_feature_dataset(
     # Previous applications
     # --------------------------------------------------------
 
-    print(
-        "Creating previous application features..."
-    )
+    print("Creating previous application features...")
 
     previous_features = (
         create_previous_application_features(
-            previous_df,
-            application_df,
+            previous_df
         )
     )
 
@@ -1052,19 +677,12 @@ def build_feature_dataset(
     # Installments
     # --------------------------------------------------------
 
-    print("Creating installment features...")
-
-    installment_features = (
-        create_installment_features(
-            installments_df
-        )
+    print(
+        "Skipping detailed installment repayment features..."
     )
 
-    features = features.merge(
-        installment_features,
-        on="sk_id_curr",
-        how="left",
-    )
+    # Installment dataset is intentionally not used for
+    # detailed behavioral features.
 
     # --------------------------------------------------------
     # Credit card
@@ -1088,7 +706,7 @@ def build_feature_dataset(
     # POS/CASH
     # --------------------------------------------------------
 
-    print("Creating POS/CASH features...")
+    print("Creating minimal POS/CASH features...")
 
     pos_cash_features = (
         create_pos_cash_features(
@@ -1106,16 +724,14 @@ def build_feature_dataset(
     # Bank-style features
     # --------------------------------------------------------
 
-    print(
-        "Adding bank-style derived features..."
-    )
+    print("Adding bank-style derived features...")
 
     features = add_bank_style_features(
         features
     )
 
     # --------------------------------------------------------
-    # Replace infinities with NaN
+    # Replace infinities
     # --------------------------------------------------------
 
     features = features.replace(
@@ -1168,43 +784,36 @@ def main():
     # --------------------------------------------------------
 
     print("\nLoading application train...")
-
     application_train = load_csv(
         APPLICATION_TRAIN_PATH
     )
 
     print("Loading application test...")
-
     application_test = load_csv(
         APPLICATION_TEST_PATH
     )
 
     print("Loading Bureau...")
-
     bureau = load_csv(
         BUREAU_PATH
     )
 
     print("Loading previous applications...")
-
     previous_application = load_csv(
         PREVIOUS_APPLICATION_PATH
     )
 
     print("Loading installments...")
-
     installments = load_csv(
         INSTALLMENTS_PAYMENTS_PATH
     )
 
     print("Loading credit card...")
-
     credit_card = load_csv(
         CREDIT_CARD_BALANCE_PATH
     )
 
     print("Loading POS/CASH...")
-
     pos_cash = load_csv(
         POS_CASH_BALANCE_PATH
     )
@@ -1248,13 +857,49 @@ def main():
     # --------------------------------------------------------
 
     if "target" in test_features.columns:
-
         test_features = test_features.drop(
             columns=["target"]
         )
 
     # ========================================================
-    # SAVE
+    # Validate train/test schema
+    # ========================================================
+
+    train_feature_columns = set(
+        train_features.columns
+    ) - {"target"}
+
+    test_feature_columns = set(
+        test_features.columns
+    )
+
+    if train_feature_columns != test_feature_columns:
+
+        missing_from_test = sorted(
+            train_feature_columns - test_feature_columns
+        )
+
+        extra_in_test = sorted(
+            test_feature_columns - train_feature_columns
+        )
+
+        raise ValueError(
+            "Train/test feature mismatch.\n"
+            f"Missing from test: {missing_from_test}\n"
+            f"Extra in test: {extra_in_test}"
+        )
+
+    # ========================================================
+    # Validate target
+    # ========================================================
+
+    if "target" not in train_features.columns:
+        raise ValueError(
+            "Target column is missing from training data."
+        )
+
+    # ========================================================
+    # Save
     # ========================================================
 
     MODEL_TRAIN_FEATURES_PATH.parent.mkdir(
@@ -1278,7 +923,7 @@ def main():
     )
 
     # ========================================================
-    # SUMMARY
+    # Summary
     # ========================================================
 
     print("\n" + "=" * 70)
@@ -1293,6 +938,11 @@ def main():
     print(
         f"Test shape: "
         f"{test_features.shape}"
+    )
+
+    print(
+        f"Number of model features: "
+        f"{len(train_feature_columns)}"
     )
 
     print(
