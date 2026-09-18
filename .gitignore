@@ -1,9 +1,12 @@
 # Environment variables and secrets
 .env
+*.env
 
-# Python environment
+# Python virtual environments
 .venv/
 venv/
+
+# Python cache
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -13,7 +16,7 @@ data/raw/*
 data/interim/*
 data/processed/*
 
-# Keep empty directory placeholders
+# Keep directory placeholders
 !data/raw/.gitkeep
 !data/interim/.gitkeep
 !data/processed/.gitkeep
@@ -29,12 +32,16 @@ models/*.pkl
 models/*.joblib
 models/*.pickle
 
-# Notebook checkpoints
-.ipynb_checkpoints/
+# Kaggle credentials and local configuration
+.kaggle/
 
-# IDE and operating-system files
+# Archives
+*.zip
+
+# IDE and OS files
 .vscode/
 .idea/
+.ipynb_checkpoints/
 .DS_Store
 Thumbs.db
 
@@ -42,32 +49,5 @@ Thumbs.db
 *.log
 logs/
 
-# Kaggle data and credentials (exclude entire directory)
-.kaggle/
-*.zip
-data/interim/*
-data/processed/*
-
-# Keep directory placeholders
-!data/raw/.gitkeep
-!data/interim/.gitkeep
-!data/processed/.gitkeep
-
-# Secrets
-.env
-
-# Python
-.venv/
-__pycache__/
-*.pyc
-
-# Fitted models
-models/*.joblib
-models/*.pkl
-
 # Generated explainability figures
 reports/figures/*.png
-
-__pycache__/
-*.py[cod]
-.venv/
