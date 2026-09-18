@@ -1,21 +1,3 @@
-"""
-Consolidated feature engineering for Home Credit Risk Detection.
-
-This module creates one applicant-level feature dataset by combining:
-
-1. Application data
-2. Bureau history
-3. Previous applications
-4. Installment payments
-5. Credit card balance
-6. POS/CASH balance
-
-Output:
-
-    data/processed/model_features_train.parquet
-    data/processed/model_features_test.parquet
-"""
-
 import numpy as np
 import pandas as pd
 
@@ -106,8 +88,8 @@ def create_application_features(
         (-df["days_employed"]) / 365.25
     )
 
-    # Home Credit sometimes contains anomalous employment
-    # values. Treat extremely large values as missing.
+    # Home Credit sometimes contains anomalous
+    # employment values.
     df.loc[
         df["employment_years"] > 100,
         "employment_years"
@@ -168,36 +150,54 @@ def create_application_features(
     application_columns = [
         "sk_id_curr",
         "target",
+
         "name_contract_type",
         "code_gender",
+
         "flag_own_car",
         "flag_own_realty",
+
         "cnt_children",
         "cnt_fam_members",
+
         "amt_income_total",
         "amt_credit",
         "amt_annuity",
-        "amt_goods_price",
+
+        # Kept out of bank-style feature calculations.
+        # Goods / Purchase Price is not used as a
+        # credit-risk feature.
+        #
+        # "amt_goods_price",
+
         "days_birth",
         "days_employed",
+
         "name_income_type",
         "name_education_type",
         "name_family_status",
         "name_housing_type",
         "name_type_suite",
+
         "region_rating_client",
         "region_rating_client_w_city",
+
         "ext_source_1",
         "ext_source_2",
         "ext_source_3",
+
         "obs_30_cnt_social_circle",
         "def_30_cnt_social_circle",
         "obs_60_cnt_social_circle",
         "def_60_cnt_social_circle",
+
         "days_last_phone_change",
+
         "flag_document_3",
+
         "age_years",
         "employment_years",
+
         "credit_to_income_ratio",
         "annuity_to_income_ratio",
         "income_per_family_member",
@@ -229,9 +229,22 @@ def create_bureau_features(
     # --------------------------------------------------------
     # Ensure required numeric columns exist
     # --------------------------------------------------------
+    #
+    # IMPORTANT:
+    # credit_active is categorical and MUST NOT be converted
+    # to numeric. It contains values such as:
+    #
+    # ACTIVE
+    # CLOSED
+    # SOLD
+    # BAD DEBT
+    #
+    # Converting it with pd.to_numeric(..., errors="coerce")
+    # would turn these values into NaN and make the active/
+    # closed account flags equal to zero.
+    # --------------------------------------------------------
 
     numeric_columns = [
-        "credit_active",
         "amt_credit_sum",
         "amt_credit_sum_debt",
         "amt_credit_sum_overdue",
@@ -249,21 +262,20 @@ def create_bureau_features(
     # Active / closed accounts
     # --------------------------------------------------------
 
-    df["active_account_flag"] = (
+    status = (
         df["credit_active"]
         .astype(str)
+        .str.strip()
         .str.upper()
-        .eq("ACTIVE")
-        .astype(int)
     )
 
+    df["active_account_flag"] = (
+        status == "ACTIVE"
+    ).astype(int)
+
     df["closed_account_flag"] = (
-        df["credit_active"]
-        .astype(str)
-        .str.upper()
-        .eq("CLOSED")
-        .astype(int)
-    )
+        status == "CLOSED"
+    ).astype(int)
 
     # --------------------------------------------------------
     # Aggregation
@@ -276,30 +288,37 @@ def create_bureau_features(
                 "sk_id_bureau",
                 "count",
             ),
+
             bureau_active_accounts=(
                 "active_account_flag",
                 "sum",
             ),
+
             bureau_closed_accounts=(
                 "closed_account_flag",
                 "sum",
             ),
+
             bureau_total_credit=(
                 "amt_credit_sum",
                 "sum",
             ),
+
             bureau_total_debt=(
                 "amt_credit_sum_debt",
                 "sum",
             ),
+
             bureau_total_overdue=(
                 "amt_credit_sum_overdue",
                 "sum",
             ),
+
             bureau_max_overdue=(
                 "amt_credit_sum_overdue",
                 "max",
             ),
+
             bureau_avg_days_credit=(
                 "days_credit",
                 "mean",
@@ -409,30 +428,37 @@ def create_previous_application_features(
                 "sk_id_prev",
                 "count",
             ),
+
             previous_approved_count=(
                 "approved_flag",
                 "sum",
             ),
+
             previous_refused_count=(
                 "refused_flag",
                 "sum",
             ),
+
             previous_avg_application_amount=(
                 "amt_application",
                 "mean",
             ),
+
             previous_avg_credit_amount=(
                 "amt_credit",
                 "mean",
             ),
+
             previous_avg_credit_application_ratio=(
                 "credit_application_ratio",
                 "mean",
             ),
+
             previous_avg_annuity=(
                 "amt_annuity",
                 "mean",
             ),
+
             previous_avg_credit_to_current_income_ratio=(
                 "credit_to_current_income_ratio",
                 "mean",
@@ -537,26 +563,32 @@ def create_installment_features(
                 "sk_id_prev",
                 "count",
             ),
+
             installment_previous_loans=(
                 "sk_id_prev",
                 "nunique",
             ),
+
             installment_avg_payment_delay=(
                 "payment_delay",
                 "mean",
             ),
+
             installment_max_payment_delay=(
                 "payment_delay",
                 "max",
             ),
+
             installment_late_payment_count=(
                 "late_payment_flag",
                 "sum",
             ),
+
             installment_avg_payment_ratio=(
                 "payment_ratio",
                 "mean",
             ),
+
             installment_total_underpayment=(
                 "underpayment",
                 "sum",
@@ -635,30 +667,37 @@ def create_credit_card_features(
                 "sk_id_prev",
                 "nunique",
             ),
+
             credit_card_avg_balance=(
                 "amt_balance",
                 "mean",
             ),
+
             credit_card_avg_limit=(
                 "amt_credit_limit_actual",
                 "mean",
             ),
+
             credit_card_avg_utilization=(
                 "utilization",
                 "mean",
             ),
+
             credit_card_max_utilization=(
                 "utilization",
                 "max",
             ),
+
             credit_card_avg_dpd=(
                 "sk_dpd",
                 "mean",
             ),
+
             credit_card_dpd_count=(
                 "dpd_flag",
                 "sum",
             ),
+
             credit_card_dpd_30_count=(
                 "dpd_30_flag",
                 "sum",
@@ -672,7 +711,10 @@ def create_credit_card_features(
         grouped["credit_card_count"],
     )
 
-    # Keep the final agreed features only.
+    # --------------------------------------------------------
+    # Final features
+    # --------------------------------------------------------
+
     grouped = grouped[
         [
             "sk_id_curr",
@@ -759,30 +801,37 @@ def create_pos_cash_features(
                 "sk_id_prev",
                 "nunique",
             ),
+
             pos_cash_history_months=(
                 "months_balance",
                 "count",
             ),
+
             pos_cash_avg_dpd=(
                 "sk_dpd",
                 "mean",
             ),
+
             pos_cash_max_dpd=(
                 "sk_dpd",
                 "max",
             ),
+
             pos_cash_dpd_count=(
                 "dpd_flag",
                 "sum",
             ),
+
             pos_cash_dpd_30_count=(
                 "dpd_30_flag",
                 "sum",
             ),
+
             pos_cash_active_count=(
                 "active_flag",
                 "sum",
             ),
+
             pos_cash_completed_count=(
                 "completed_flag",
                 "sum",
@@ -818,6 +867,129 @@ def create_pos_cash_features(
 
 
 # ============================================================
+# BANK-STYLE DERIVED FEATURES
+# ============================================================
+
+def add_bank_style_features(
+    features: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Add business-friendly credit-risk features using only
+    fields available in the consolidated Home Credit dataset.
+
+    Important unit conventions:
+
+    - amt_income_total is treated as annual gross income.
+    - amt_annuity is the loan annuity amount from application data.
+    - These are dataset-derived features.
+    - They are NOT manually entered customer values such as
+      credit score, household expenses, or applicant's existing EMI.
+
+    Features added:
+
+    1. monthly_gross_income
+    2. loan_annuity_to_monthly_income_ratio
+    3. bureau_debt_to_annual_income_ratio
+    4. bureau_overdue_to_annual_income_ratio
+    5. bureau_credit_to_annual_income_ratio
+    6. active_bureau_account_ratio
+    7. credit_card_balance_to_monthly_income_ratio
+    """
+
+    # --------------------------------------------------------
+    # Income
+    # --------------------------------------------------------
+
+    income = (
+        features["amt_income_total"]
+        .replace(0, np.nan)
+    )
+
+    # Annual income -> monthly gross income
+    features["monthly_gross_income"] = (
+        income / 12.0
+    )
+
+    monthly_income = (
+        features["monthly_gross_income"]
+        .replace(0, np.nan)
+    )
+
+    # --------------------------------------------------------
+    # Current loan burden
+    # --------------------------------------------------------
+
+    features[
+        "loan_annuity_to_monthly_income_ratio"
+    ] = safe_divide(
+        features["amt_annuity"],
+        monthly_income,
+    )
+
+    # --------------------------------------------------------
+    # Existing bureau debt burden
+    # --------------------------------------------------------
+
+    features[
+        "bureau_debt_to_annual_income_ratio"
+    ] = safe_divide(
+        features["bureau_total_debt"],
+        income,
+    )
+
+    # --------------------------------------------------------
+    # Bureau overdue burden
+    # --------------------------------------------------------
+
+    features[
+        "bureau_overdue_to_annual_income_ratio"
+    ] = safe_divide(
+        features["bureau_total_overdue"],
+        income,
+    )
+
+    # --------------------------------------------------------
+    # Total bureau credit exposure
+    # --------------------------------------------------------
+
+    features[
+        "bureau_credit_to_annual_income_ratio"
+    ] = safe_divide(
+        features["bureau_total_credit"],
+        income,
+    )
+
+    # --------------------------------------------------------
+    # Active bureau account ratio
+    # --------------------------------------------------------
+
+    bureau_accounts = (
+        features["bureau_total_accounts"]
+        .replace(0, np.nan)
+    )
+
+    features[
+        "active_bureau_account_ratio"
+    ] = safe_divide(
+        features["bureau_active_accounts"],
+        bureau_accounts,
+    )
+
+    # --------------------------------------------------------
+    # Credit card balance / monthly income
+    # --------------------------------------------------------
+
+    features[
+        "credit_card_balance_to_monthly_income_ratio"
+    ] = safe_divide(
+        features["credit_card_avg_balance"],
+        monthly_income,
+    )
+
+    return features
+
+
+# ============================================================
 # COMPLETE DATASET BUILDER
 # ============================================================
 
@@ -839,6 +1011,10 @@ def build_feature_dataset(
         application_df
     )
 
+    # --------------------------------------------------------
+    # Bureau
+    # --------------------------------------------------------
+
     print("Creating Bureau features...")
 
     bureau_features = create_bureau_features(
@@ -851,7 +1027,13 @@ def build_feature_dataset(
         how="left",
     )
 
-    print("Creating previous application features...")
+    # --------------------------------------------------------
+    # Previous applications
+    # --------------------------------------------------------
+
+    print(
+        "Creating previous application features..."
+    )
 
     previous_features = (
         create_previous_application_features(
@@ -865,6 +1047,10 @@ def build_feature_dataset(
         on="sk_id_curr",
         how="left",
     )
+
+    # --------------------------------------------------------
+    # Installments
+    # --------------------------------------------------------
 
     print("Creating installment features...")
 
@@ -880,6 +1066,10 @@ def build_feature_dataset(
         how="left",
     )
 
+    # --------------------------------------------------------
+    # Credit card
+    # --------------------------------------------------------
+
     print("Creating credit card features...")
 
     credit_card_features = (
@@ -894,6 +1084,10 @@ def build_feature_dataset(
         how="left",
     )
 
+    # --------------------------------------------------------
+    # POS/CASH
+    # --------------------------------------------------------
+
     print("Creating POS/CASH features...")
 
     pos_cash_features = (
@@ -906,6 +1100,18 @@ def build_feature_dataset(
         pos_cash_features,
         on="sk_id_curr",
         how="left",
+    )
+
+    # --------------------------------------------------------
+    # Bank-style features
+    # --------------------------------------------------------
+
+    print(
+        "Adding bank-style derived features..."
+    )
+
+    features = add_bank_style_features(
+        features
     )
 
     # --------------------------------------------------------
@@ -938,9 +1144,11 @@ def build_feature_dataset(
     # Sort
     # --------------------------------------------------------
 
-    features = features.sort_values(
-        "sk_id_curr"
-    ).reset_index(drop=True)
+    features = (
+        features
+        .sort_values("sk_id_curr")
+        .reset_index(drop=True)
+    )
 
     return features
 
@@ -960,43 +1168,50 @@ def main():
     # --------------------------------------------------------
 
     print("\nLoading application train...")
+
     application_train = load_csv(
         APPLICATION_TRAIN_PATH
     )
 
     print("Loading application test...")
+
     application_test = load_csv(
         APPLICATION_TEST_PATH
     )
 
     print("Loading Bureau...")
+
     bureau = load_csv(
         BUREAU_PATH
     )
 
     print("Loading previous applications...")
+
     previous_application = load_csv(
         PREVIOUS_APPLICATION_PATH
     )
 
     print("Loading installments...")
+
     installments = load_csv(
         INSTALLMENTS_PAYMENTS_PATH
     )
 
     print("Loading credit card...")
+
     credit_card = load_csv(
         CREDIT_CARD_BALANCE_PATH
     )
 
     print("Loading POS/CASH...")
+
     pos_cash = load_csv(
         POS_CASH_BALANCE_PATH
     )
 
-    # --------------------------------------------------------
-    # Build train
-    # --------------------------------------------------------
+    # ========================================================
+    # BUILD TRAIN FEATURES
+    # ========================================================
 
     print("\n" + "=" * 70)
     print("BUILDING TRAIN FEATURES")
@@ -1011,9 +1226,9 @@ def main():
         pos_cash,
     )
 
-    # --------------------------------------------------------
-    # Build test
-    # --------------------------------------------------------
+    # ========================================================
+    # BUILD TEST FEATURES
+    # ========================================================
 
     print("\n" + "=" * 70)
     print("BUILDING TEST FEATURES")
@@ -1033,13 +1248,14 @@ def main():
     # --------------------------------------------------------
 
     if "target" in test_features.columns:
+
         test_features = test_features.drop(
             columns=["target"]
         )
 
-    # --------------------------------------------------------
-    # Save
-    # --------------------------------------------------------
+    # ========================================================
+    # SAVE
+    # ========================================================
 
     MODEL_TRAIN_FEATURES_PATH.parent.mkdir(
         parents=True,
@@ -1061,9 +1277,9 @@ def main():
         index=False,
     )
 
-    # --------------------------------------------------------
-    # Summary
-    # --------------------------------------------------------
+    # ========================================================
+    # SUMMARY
+    # ========================================================
 
     print("\n" + "=" * 70)
     print("FEATURE ENGINEERING COMPLETED")
@@ -1089,6 +1305,10 @@ def main():
         f"{MODEL_TEST_FEATURES_PATH}"
     )
 
+
+# ============================================================
+# ENTRY POINT
+# ============================================================
 
 if __name__ == "__main__":
     main()

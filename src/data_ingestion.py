@@ -1,15 +1,3 @@
-"""
-Data ingestion module.
-
-Converts raw Home Credit CSV files into Parquet files.
-
-Raw files are expected under:
-    data/raw/
-
-Output files are written to:
-    data/interim/
-"""
-
 from pathlib import Path
 import pandas as pd
 

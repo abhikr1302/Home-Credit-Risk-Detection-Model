@@ -1,356 +1,395 @@
 {
+    "selection_method": "XGBoost feature importance",
+    "dataset_shape": [
+        307511,
+        84
+    ],
+    "available_feature_count": 82,
     "recommended_feature_count": 50,
+    "selection_metric": "PR-AUC",
+    "pr_auc_tolerance": 0.002,
+    "max_recommended_features": 60,
     "recommended_features": [
         "ext_source_mean",
         "name_education_type",
         "name_income_type",
         "code_gender",
+        "name_family_status",
         "flag_own_car",
+        "name_housing_type",
         "ext_source_3",
         "name_type_suite",
-        "name_family_status",
-        "name_housing_type",
+        "ext_source_2",
         "name_contract_type",
         "installment_late_payment_rate",
-        "flag_document_3",
-        "ext_source_2",
         "previous_refusal_rate",
+        "flag_document_3",
+        "region_rating_client",
         "credit_card_avg_utilization",
         "previous_avg_credit_application_ratio",
-        "region_rating_client",
         "pos_cash_loan_count",
         "age_years",
-        "employment_years",
-        "credit_card_avg_balance",
+        "credit_card_balance_to_monthly_income_ratio",
         "credit_card_max_utilization",
-        "ext_source_1",
-        "amt_goods_price",
-        "def_60_cnt_social_circle",
-        "amt_credit",
-        "previous_approval_rate",
+        "employment_years",
+        "active_bureau_account_ratio",
         "flag_own_realty",
-        "amt_annuity",
-        "installment_max_payment_delay",
-        "installment_avg_payment_ratio",
+        "ext_source_1",
+        "def_60_cnt_social_circle",
         "def_30_cnt_social_circle",
-        "bureau_max_overdue",
-        "region_rating_client_w_city",
-        "pos_cash_history_months",
-        "previous_avg_annuity",
-        "days_birth",
+        "installment_avg_payment_ratio",
         "pos_cash_active_count",
-        "days_employed",
+        "amt_credit",
+        "credit_card_avg_balance",
+        "previous_approval_rate",
+        "region_rating_client_w_city",
+        "days_birth",
+        "bureau_active_accounts",
+        "amt_annuity",
+        "previous_avg_annuity",
+        "pos_cash_history_months",
+        "bureau_debt_to_annual_income_ratio",
         "bureau_avg_days_credit",
-        "bureau_total_debt",
         "installment_previous_loans",
+        "installment_max_payment_delay",
+        "loan_annuity_to_monthly_income_ratio",
         "installment_total_records",
-        "previous_refused_count",
-        "credit_card_dpd_rate",
-        "previous_approved_count",
-        "pos_cash_completed_count",
+        "days_employed",
+        "bureau_total_credit",
+        "bureau_total_overdue",
         "annuity_to_income_ratio",
-        "credit_to_income_ratio",
-        "bureau_total_credit"
+        "pos_cash_max_dpd",
+        "credit_card_dpd_30_count"
+    ],
+    "selected_bank_style_features": [
+        "credit_card_balance_to_monthly_income_ratio",
+        "active_bureau_account_ratio",
+        "bureau_debt_to_annual_income_ratio",
+        "loan_annuity_to_monthly_income_ratio"
     ],
     "feature_importance": [
         {
             "feature": "ext_source_mean",
-            "importance": 0.11192309856414795
+            "importance": 0.10743033140897751
         },
         {
             "feature": "name_education_type",
-            "importance": 0.07130181044340134
+            "importance": 0.05919716181233525
         },
         {
             "feature": "name_income_type",
-            "importance": 0.04939122498035431
+            "importance": 0.044814014341682196
         },
         {
             "feature": "code_gender",
-            "importance": 0.04165486618876457
-        },
-        {
-            "feature": "flag_own_car",
-            "importance": 0.03385956585407257
-        },
-        {
-            "feature": "ext_source_3",
-            "importance": 0.03363902494311333
-        },
-        {
-            "feature": "name_type_suite",
-            "importance": 0.032003190368413925
+            "importance": 0.04372747987508774
         },
         {
             "feature": "name_family_status",
-            "importance": 0.030662840232253075
+            "importance": 0.03262356831692159
+        },
+        {
+            "feature": "flag_own_car",
+            "importance": 0.03088386170566082
         },
         {
             "feature": "name_housing_type",
-            "importance": 0.029301751405000687
+            "importance": 0.02806963538751006
         },
         {
-            "feature": "name_contract_type",
-            "importance": 0.023332469165325165
+            "feature": "ext_source_3",
+            "importance": 0.02589540183544159
         },
         {
-            "feature": "installment_late_payment_rate",
-            "importance": 0.019174722954630852
-        },
-        {
-            "feature": "flag_document_3",
-            "importance": 0.017338939011096954
+            "feature": "name_type_suite",
+            "importance": 0.025086586130782962
         },
         {
             "feature": "ext_source_2",
-            "importance": 0.016554616391658783
+            "importance": 0.023149458691477776
+        },
+        {
+            "feature": "name_contract_type",
+            "importance": 0.021996629424393177
+        },
+        {
+            "feature": "installment_late_payment_rate",
+            "importance": 0.019246770069003105
         },
         {
             "feature": "previous_refusal_rate",
-            "importance": 0.016313865780830383
+            "importance": 0.017036253586411476
         },
         {
-            "feature": "credit_card_avg_utilization",
-            "importance": 0.015902692452073097
-        },
-        {
-            "feature": "previous_avg_credit_application_ratio",
-            "importance": 0.01517320703715086
+            "feature": "flag_document_3",
+            "importance": 0.016325155273079872
         },
         {
             "feature": "region_rating_client",
-            "importance": 0.014585688710212708
+            "importance": 0.015805639792233706
+        },
+        {
+            "feature": "credit_card_avg_utilization",
+            "importance": 0.015163405798375607
+        },
+        {
+            "feature": "previous_avg_credit_application_ratio",
+            "importance": 0.014540600590407848
         },
         {
             "feature": "pos_cash_loan_count",
-            "importance": 0.013069918379187584
+            "importance": 0.01345599815249443
         },
         {
             "feature": "age_years",
-            "importance": 0.01254180260002613
+            "importance": 0.012483280152082443
         },
         {
-            "feature": "employment_years",
-            "importance": 0.012473992072045803
-        },
-        {
-            "feature": "credit_card_avg_balance",
-            "importance": 0.012077157385647297
+            "feature": "credit_card_balance_to_monthly_income_ratio",
+            "importance": 0.01210742723196745
         },
         {
             "feature": "credit_card_max_utilization",
-            "importance": 0.011694365181028843
+            "importance": 0.012073026038706303
         },
         {
-            "feature": "ext_source_1",
-            "importance": 0.011490041390061378
+            "feature": "employment_years",
+            "importance": 0.011911381036043167
         },
         {
-            "feature": "amt_goods_price",
-            "importance": 0.011041339486837387
-        },
-        {
-            "feature": "def_60_cnt_social_circle",
-            "importance": 0.010756033472716808
-        },
-        {
-            "feature": "amt_credit",
-            "importance": 0.010333788581192493
-        },
-        {
-            "feature": "previous_approval_rate",
-            "importance": 0.010075018741190434
+            "feature": "active_bureau_account_ratio",
+            "importance": 0.0113025838509202
         },
         {
             "feature": "flag_own_realty",
-            "importance": 0.009753858670592308
+            "importance": 0.010875018313527107
         },
         {
-            "feature": "amt_annuity",
-            "importance": 0.009565187618136406
+            "feature": "ext_source_1",
+            "importance": 0.010168381966650486
         },
         {
-            "feature": "installment_max_payment_delay",
-            "importance": 0.009195744059979916
-        },
-        {
-            "feature": "installment_avg_payment_ratio",
-            "importance": 0.009176204912364483
+            "feature": "def_60_cnt_social_circle",
+            "importance": 0.009904777631163597
         },
         {
             "feature": "def_30_cnt_social_circle",
-            "importance": 0.008876457810401917
+            "importance": 0.0098490621894598
         },
         {
-            "feature": "bureau_max_overdue",
-            "importance": 0.008762732148170471
-        },
-        {
-            "feature": "region_rating_client_w_city",
-            "importance": 0.00870300643146038
-        },
-        {
-            "feature": "pos_cash_history_months",
-            "importance": 0.008684471249580383
-        },
-        {
-            "feature": "previous_avg_annuity",
-            "importance": 0.008619783446192741
-        },
-        {
-            "feature": "days_birth",
-            "importance": 0.008466795086860657
+            "feature": "installment_avg_payment_ratio",
+            "importance": 0.00964955985546112
         },
         {
             "feature": "pos_cash_active_count",
-            "importance": 0.008211669512093067
+            "importance": 0.009442595764994621
         },
         {
-            "feature": "days_employed",
-            "importance": 0.00820879265666008
+            "feature": "amt_credit",
+            "importance": 0.009090942330658436
         },
         {
-            "feature": "bureau_avg_days_credit",
-            "importance": 0.008175051771104336
+            "feature": "credit_card_avg_balance",
+            "importance": 0.009051904082298279
         },
         {
-            "feature": "bureau_total_debt",
-            "importance": 0.008136788383126259
+            "feature": "previous_approval_rate",
+            "importance": 0.008859354071319103
         },
         {
-            "feature": "installment_previous_loans",
-            "importance": 0.008128857240080833
+            "feature": "region_rating_client_w_city",
+            "importance": 0.008824314922094345
         },
         {
-            "feature": "installment_total_records",
-            "importance": 0.007875507697463036
-        },
-        {
-            "feature": "previous_refused_count",
-            "importance": 0.007765127811580896
-        },
-        {
-            "feature": "credit_card_dpd_rate",
-            "importance": 0.007506202440708876
-        },
-        {
-            "feature": "previous_approved_count",
-            "importance": 0.00747085502371192
-        },
-        {
-            "feature": "pos_cash_completed_count",
-            "importance": 0.007468228228390217
-        },
-        {
-            "feature": "annuity_to_income_ratio",
-            "importance": 0.007466366048902273
-        },
-        {
-            "feature": "credit_to_income_ratio",
-            "importance": 0.0069219511933624744
-        },
-        {
-            "feature": "bureau_total_credit",
-            "importance": 0.0069034649059176445
-        },
-        {
-            "feature": "credit_card_avg_limit",
-            "importance": 0.006776654627174139
-        },
-        {
-            "feature": "previous_avg_application_amount",
-            "importance": 0.006714521907269955
-        },
-        {
-            "feature": "bureau_total_accounts",
-            "importance": 0.006662447936832905
-        },
-        {
-            "feature": "days_last_phone_change",
-            "importance": 0.006556855048984289
-        },
-        {
-            "feature": "previous_avg_credit_amount",
-            "importance": 0.0064497641287744045
-        },
-        {
-            "feature": "installment_total_underpayment",
-            "importance": 0.006426380481570959
-        },
-        {
-            "feature": "pos_cash_avg_dpd",
-            "importance": 0.006187510676681995
-        },
-        {
-            "feature": "credit_card_dpd_30_count",
-            "importance": 0.006185114849358797
-        },
-        {
-            "feature": "installment_avg_payment_delay",
-            "importance": 0.0061399806290864944
-        },
-        {
-            "feature": "obs_60_cnt_social_circle",
-            "importance": 0.006131209433078766
-        },
-        {
-            "feature": "bureau_total_overdue",
-            "importance": 0.006119852419942617
-        },
-        {
-            "feature": "obs_30_cnt_social_circle",
-            "importance": 0.0056028845719993114
-        },
-        {
-            "feature": "previous_total_applications",
-            "importance": 0.005432253237813711
-        },
-        {
-            "feature": "amt_income_total",
-            "importance": 0.0053980289958417416
-        },
-        {
-            "feature": "previous_avg_credit_to_current_income_ratio",
-            "importance": 0.00526474742218852
-        },
-        {
-            "feature": "cnt_fam_members",
-            "importance": 0.005247792694717646
-        },
-        {
-            "feature": "pos_cash_dpd_30_count",
-            "importance": 0.004971154499799013
-        },
-        {
-            "feature": "credit_card_avg_dpd",
-            "importance": 0.004919770639389753
-        },
-        {
-            "feature": "income_per_family_member",
-            "importance": 0.0048911417834460735
-        },
-        {
-            "feature": "pos_cash_dpd_rate",
-            "importance": 0.004820261150598526
-        },
-        {
-            "feature": "pos_cash_max_dpd",
-            "importance": 0.004781961906701326
-        },
-        {
-            "feature": "installment_late_payment_count",
-            "importance": 0.004743434488773346
-        },
-        {
-            "feature": "cnt_children",
-            "importance": 0.004569003824144602
+            "feature": "days_birth",
+            "importance": 0.008800395764410496
         },
         {
             "feature": "bureau_active_accounts",
-            "importance": 0.0
+            "importance": 0.008660795167088509
+        },
+        {
+            "feature": "amt_annuity",
+            "importance": 0.008457438088953495
+        },
+        {
+            "feature": "previous_avg_annuity",
+            "importance": 0.008294787257909775
+        },
+        {
+            "feature": "pos_cash_history_months",
+            "importance": 0.007945357821881771
+        },
+        {
+            "feature": "bureau_debt_to_annual_income_ratio",
+            "importance": 0.007942726835608482
+        },
+        {
+            "feature": "bureau_avg_days_credit",
+            "importance": 0.007886294275522232
+        },
+        {
+            "feature": "installment_previous_loans",
+            "importance": 0.007865116000175476
+        },
+        {
+            "feature": "installment_max_payment_delay",
+            "importance": 0.007626379374414682
+        },
+        {
+            "feature": "loan_annuity_to_monthly_income_ratio",
+            "importance": 0.007625014986842871
+        },
+        {
+            "feature": "installment_total_records",
+            "importance": 0.0075186616741120815
+        },
+        {
+            "feature": "days_employed",
+            "importance": 0.0073325056582689285
+        },
+        {
+            "feature": "bureau_total_credit",
+            "importance": 0.00724042858928442
+        },
+        {
+            "feature": "bureau_total_overdue",
+            "importance": 0.006900511682033539
+        },
+        {
+            "feature": "annuity_to_income_ratio",
+            "importance": 0.0068519203923642635
+        },
+        {
+            "feature": "pos_cash_max_dpd",
+            "importance": 0.0067759063094854355
+        },
+        {
+            "feature": "credit_card_dpd_30_count",
+            "importance": 0.006513799075037241
+        },
+        {
+            "feature": "bureau_overdue_to_annual_income_ratio",
+            "importance": 0.006434984505176544
+        },
+        {
+            "feature": "credit_card_dpd_rate",
+            "importance": 0.006402246188372374
+        },
+        {
+            "feature": "credit_card_avg_limit",
+            "importance": 0.006369330920279026
+        },
+        {
+            "feature": "bureau_total_debt",
+            "importance": 0.006275261752307415
+        },
+        {
+            "feature": "previous_avg_credit_amount",
+            "importance": 0.006269372534006834
+        },
+        {
+            "feature": "credit_to_income_ratio",
+            "importance": 0.006255263928323984
+        },
+        {
+            "feature": "previous_avg_application_amount",
+            "importance": 0.006202295888215303
+        },
+        {
+            "feature": "pos_cash_completed_count",
+            "importance": 0.006111472845077515
+        },
+        {
+            "feature": "days_last_phone_change",
+            "importance": 0.006081945262849331
+        },
+        {
+            "feature": "previous_refused_count",
+            "importance": 0.00604869844391942
+        },
+        {
+            "feature": "bureau_credit_to_annual_income_ratio",
+            "importance": 0.005952133797109127
         },
         {
             "feature": "bureau_closed_accounts",
+            "importance": 0.005930667743086815
+        },
+        {
+            "feature": "bureau_total_accounts",
+            "importance": 0.0059066531248390675
+        },
+        {
+            "feature": "installment_avg_payment_delay",
+            "importance": 0.005865554790943861
+        },
+        {
+            "feature": "installment_total_underpayment",
+            "importance": 0.005865161307156086
+        },
+        {
+            "feature": "installment_late_payment_count",
+            "importance": 0.005791631061583757
+        },
+        {
+            "feature": "pos_cash_avg_dpd",
+            "importance": 0.0054147737100720406
+        },
+        {
+            "feature": "obs_30_cnt_social_circle",
+            "importance": 0.0054051317274570465
+        },
+        {
+            "feature": "credit_card_avg_dpd",
+            "importance": 0.005309102591127157
+        },
+        {
+            "feature": "previous_approved_count",
+            "importance": 0.005303671117872
+        },
+        {
+            "feature": "monthly_gross_income",
+            "importance": 0.005268846172839403
+        },
+        {
+            "feature": "previous_avg_credit_to_current_income_ratio",
+            "importance": 0.00520883034914732
+        },
+        {
+            "feature": "previous_total_applications",
+            "importance": 0.005195909179747105
+        },
+        {
+            "feature": "pos_cash_dpd_rate",
+            "importance": 0.005185010377317667
+        },
+        {
+            "feature": "obs_60_cnt_social_circle",
+            "importance": 0.005160180851817131
+        },
+        {
+            "feature": "amt_income_total",
+            "importance": 0.004870697855949402
+        },
+        {
+            "feature": "cnt_fam_members",
+            "importance": 0.00483812065795064
+        },
+        {
+            "feature": "pos_cash_dpd_30_count",
+            "importance": 0.004824940115213394
+        },
+        {
+            "feature": "income_per_family_member",
+            "importance": 0.0046412162482738495
+        },
+        {
+            "feature": "cnt_children",
+            "importance": 0.004155701491981745
+        },
+        {
+            "feature": "bureau_max_overdue",
             "importance": 0.0
         },
         {
@@ -360,36 +399,46 @@
     ],
     "evaluation_results": [
         {
-            "roc_auc": 0.7753952950999421,
-            "pr_auc": 0.26927729257936567,
-            "precision": 0.182426597582038,
-            "recall": 0.6807653575025177,
-            "f1": 0.2877452858298217,
-            "feature_count": 76
+            "roc_auc": 0.7732404342869575,
+            "pr_auc": 0.26503376044494575,
+            "precision": 0.18169604471195186,
+            "recall": 0.6809667673716012,
+            "f1": 0.2868536036991473,
+            "feature_count": 75
         },
         {
-            "roc_auc": 0.7754248254531517,
-            "pr_auc": 0.2688868841432409,
-            "precision": 0.18197443334407562,
-            "recall": 0.6823766364551863,
-            "f1": 0.2873256159097655,
+            "roc_auc": 0.7733175580437359,
+            "pr_auc": 0.265190907425256,
+            "precision": 0.1815218552955007,
+            "recall": 0.6841893252769385,
+            "f1": 0.2869209003758605,
             "feature_count": 60
         },
         {
-            "roc_auc": 0.7740334611551083,
-            "pr_auc": 0.27034254543376474,
-            "precision": 0.18172054559123618,
-            "recall": 0.6815709969788519,
-            "f1": 0.2869377199304702,
+            "roc_auc": 0.7720462299380534,
+            "pr_auc": 0.2665071697504237,
+            "precision": 0.18071968487171297,
+            "recall": 0.6837865055387714,
+            "f1": 0.2858826996758031,
             "feature_count": 50
         },
         {
-            "roc_auc": 0.7714871766591974,
-            "pr_auc": 0.2653594076281227,
-            "precision": 0.17943398233854665,
-            "recall": 0.6793554884189326,
-            "f1": 0.2838867146404074,
+            "roc_auc": 0.7688210804008974,
+            "pr_auc": 0.26191129498551863,
+            "precision": 0.17857710441277747,
+            "recall": 0.6789526686807653,
+            "f1": 0.2827782904118782,
             "feature_count": 40
+        },
+        {
+            "roc_auc": 0.7662598125325757,
+            "pr_auc": 0.25582592372848867,
+            "precision": 0.1765807962529274,
+            "recall": 0.6833836858006043,
+            "f1": 0.2806451612903226,
+            "feature_count": 30
         }
-    ]
+    ],
+    "random_state": 42,
+    "validation_size": 0.2
 }

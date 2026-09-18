@@ -7,20 +7,12 @@ import streamlit as st
 
 
 # ============================================================
-# Configuration
+# CONFIGURATION
 # ============================================================
 
-API_URL = os.getenv(
-    "API_URL",
-    "http://127.0.0.1:8000"
-)
+API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
 
-
-# ============================================================
-# Model Features
-# Must exactly match the trained XGBoost pipeline
-# ============================================================
-
+# These MUST remain aligned with the currently trained model.
 FEATURES = [
     "ext_source_mean",
     "name_education_type",
@@ -76,888 +68,792 @@ FEATURES = [
 
 
 # ============================================================
-# Helper Functions
+# HELPER FUNCTIONS
 # ============================================================
 
-def safe_float(value: Any, default=np.nan) -> float:
-    """Safely convert a value to float."""
-
-    try:
-        if value is None:
-            return default
-
-        if isinstance(value, str) and not value.strip():
-            return default
-
-        result = float(value)
-
-        if not np.isfinite(result):
-            return default
-
-        return result
-
-    except (ValueError, TypeError):
-        return default
-
-
-def make_json_safe(value: Any) -> Any:
-    """
-    Convert Python/NumPy values into JSON-safe values.
-
-    JSON does not support NaN or Infinity.
-    These values are converted to None, which becomes JSON null.
-    """
-
+def safe_float(value):
+    """Convert empty/invalid values to None."""
     if value is None:
         return None
 
-    if isinstance(value, (float, np.floating)):
+    try:
+        value = float(value)
 
         if not np.isfinite(value):
             return None
 
-        return float(value)
+        return value
 
-    if isinstance(value, (int, np.integer)):
+    except (ValueError, TypeError):
+        return None
+
+
+def make_json_safe(value):
+    """Convert NaN/Infinity to JSON-safe None."""
+
+    if isinstance(value, dict):
+        return {
+            key: make_json_safe(val)
+            for key, val in value.items()
+        }
+
+    if isinstance(value, list):
+        return [
+            make_json_safe(item)
+            for item in value
+        ]
+
+    if isinstance(value, float):
+        if not np.isfinite(value):
+            return None
+
+    if isinstance(value, np.floating):
+        value = float(value)
+
+        if not np.isfinite(value):
+            return None
+
+        return value
+
+    if isinstance(value, np.integer):
         return int(value)
 
     return value
 
 
-def make_features_json_safe(
-    features: Dict[str, Any]
-) -> Dict[str, Any]:
-    """Convert the complete feature dictionary to JSON-safe values."""
+def calculate_ratios(
+    monthly_income,
+    existing_emi,
+    household_expenses,
+    proposed_emi,
+    loan_amount,
+):
+    """Calculate common credit-analysis ratios."""
+
+    monthly_income = safe_float(monthly_income) or 0
+    existing_emi = safe_float(existing_emi) or 0
+    household_expenses = safe_float(household_expenses) or 0
+    proposed_emi = safe_float(proposed_emi) or 0
+    loan_amount = safe_float(loan_amount) or 0
+
+    total_emi = existing_emi + proposed_emi
+
+    if monthly_income > 0:
+        foir = (total_emi / monthly_income) * 100
+        existing_dti = (existing_emi / monthly_income) * 100
+        total_dti = (
+            (total_emi + household_expenses)
+            / monthly_income
+        ) * 100
+        loan_to_income = (
+            loan_amount / (monthly_income * 12)
+        )
+    else:
+        foir = None
+        existing_dti = None
+        total_dti = None
+        loan_to_income = None
+
+    disposable_income = (
+        monthly_income
+        - household_expenses
+        - total_emi
+    )
 
     return {
-        feature: make_json_safe(value)
-        for feature, value in features.items()
+        "total_emi": total_emi,
+        "foir": foir,
+        "existing_dti": existing_dti,
+        "total_dti": total_dti,
+        "disposable_income": disposable_income,
+        "loan_to_income": loan_to_income,
     }
 
 
-# ============================================================
-# Feature Preparation
-# ============================================================
+def get_credit_capacity_message(foir):
+    """Interpret EMI burden."""
 
-def calculate_features(
-    raw: Dict[str, Any]
-) -> Dict[str, Any]:
-    """
-    Convert customer/bank-entered application information
-    into the 50 features expected by the trained model.
+    if foir is None:
+        return "Unable to calculate EMI burden."
 
-    Historical features that normally come from:
-        - Credit bureau
-        - Previous applications
-        - Installment history
-        - Credit card history
-        - POS/Cash history
+    if foir <= 30:
+        return "Low EMI burden"
 
-    are left as NaN.
+    if foir <= 40:
+        return "Moderate EMI burden"
 
-    The preprocessing pipeline on the API side handles
-    missing values through its trained imputers.
-    """
+    if foir <= 50:
+        return "High EMI burden"
 
-    # --------------------------------------------------------
-    # Basic values
-    # --------------------------------------------------------
+    return "Very high EMI burden"
 
-    income = safe_float(
-        raw.get("amt_income_total")
-    )
 
-    credit = safe_float(
-        raw.get("amt_credit")
-    )
+def risk_result(probability, threshold=0.50):
+    """Convert model probability into a customer-friendly result."""
 
-    annuity = safe_float(
-        raw.get("amt_annuity")
-    )
-
-    goods_price = safe_float(
-        raw.get("amt_goods_price")
-    )
-
-    age = safe_float(
-        raw.get("age_years")
-    )
-
-    employment_years = safe_float(
-        raw.get("employment_years")
-    )
-
-    # --------------------------------------------------------
-    # Start all model features as missing
-    # --------------------------------------------------------
-
-    values = {
-        feature: np.nan
-        for feature in FEATURES
-    }
-
-    # ========================================================
-    # Applicant Information
-    # ========================================================
-
-    values["code_gender"] = raw.get(
-        "code_gender",
-        None
-    )
-
-    values["name_education_type"] = raw.get(
-        "name_education_type",
-        None
-    )
-
-    values["name_income_type"] = raw.get(
-        "name_income_type",
-        None
-    )
-
-    values["name_family_status"] = raw.get(
-        "name_family_status",
-        None
-    )
-
-    values["name_housing_type"] = raw.get(
-        "name_housing_type",
-        None
-    )
-
-    values["name_contract_type"] = raw.get(
-        "name_contract_type",
-        None
-    )
-
-    values["name_type_suite"] = raw.get(
-        "name_type_suite",
-        "Unaccompanied"
-    )
-
-    # ========================================================
-    # Ownership
-    # ========================================================
-
-    values["flag_own_car"] = raw.get(
-        "flag_own_car",
-        np.nan
-    )
-
-    values["flag_own_realty"] = raw.get(
-        "flag_own_realty",
-        np.nan
-    )
-
-    # ========================================================
-    # Financial Features
-    # ========================================================
-
-    values["amt_credit"] = credit
-
-    values["amt_annuity"] = annuity
-
-    values["amt_goods_price"] = goods_price
-
-    # ========================================================
-    # Age
-    # ========================================================
-
-    values["age_years"] = age
-
-    if np.isfinite(age):
-        values["days_birth"] = -(
-            age * 365.25
+    if probability < 0.30:
+        return (
+            "LOW",
+            "Lower estimated repayment difficulty",
+            "The model estimates a relatively lower probability "
+            "of repayment difficulty."
         )
 
-    # ========================================================
-    # Employment
-    # ========================================================
-
-    values["employment_years"] = employment_years
-
-    if np.isfinite(employment_years):
-        values["days_employed"] = -(
-            employment_years * 365.25
+    if probability < threshold:
+        return (
+            "MEDIUM",
+            "Moderate estimated repayment difficulty",
+            "The application may require additional review "
+            "of income, liabilities and credit history."
         )
 
-    # ========================================================
-    # Income Ratios
-    # ========================================================
+    return (
+        "HIGH",
+        "Higher estimated repayment difficulty",
+        "The application should receive additional credit "
+        "assessment before approval."
+    )
+
+
+def build_model_features(
+    age,
+    employment_years,
+    monthly_income,
+    loan_amount,
+    proposed_emi,
+    existing_emi,
+    household_expenses,
+    credit_score,
+    max_dpd,
+    previous_overdue,
+    previous_loans,
+    previous_approved,
+    previous_refused,
+    credit_card_balance,
+    credit_card_limit,
+    housing_type,
+    education_type,
+    income_type,
+    family_status,
+    gender,
+    own_car,
+    own_realty,
+):
+    """
+    Build the currently trained model's 50-feature input.
+
+    Important:
+    The new bank-style UI fields are collected for the
+    customer-facing analysis. Only features that already
+    exist in the trained model are sent to the model.
+
+    New fields will affect the ML prediction only after
+    model retraining.
+    """
+
+    data: Dict[str, Any] = {feature: None for feature in FEATURES}
+
+    # --------------------------------------------------------
+    # Existing model features
+    # --------------------------------------------------------
+
+    data["age_years"] = safe_float(age)
+    data["employment_years"] = safe_float(employment_years)
+
+    data["amt_credit"] = safe_float(loan_amount)
+    data["amt_annuity"] = safe_float(proposed_emi)
+
+    data["name_housing_type"] = housing_type
+    data["name_education_type"] = education_type
+    data["name_income_type"] = income_type
+    data["name_family_status"] = family_status
+    data["code_gender"] = gender
+
+    data["flag_own_car"] = own_car
+    data["flag_own_realty"] = own_realty
+
+    # Derived features used by current model
+    income = safe_float(monthly_income)
+
+    loan_amount_value = safe_float(loan_amount)
+    proposed_emi_value = safe_float(proposed_emi)
+
+    if income and income > 0 and loan_amount_value is not None:
+        data["credit_to_income_ratio"] = (
+            loan_amount_value / (income * 12)
+        )
+
+    if income and income > 0 and proposed_emi_value is not None:
+        data["annuity_to_income_ratio"] = (
+            proposed_emi_value / income
+        )
+
+    age_value = safe_float(age)
+    if age_value is not None:
+        data["days_birth"] = -(age_value * 365.25)
+
+    employment_years_value = safe_float(employment_years)
+    if employment_years_value is not None:
+        data["days_employed"] = -(employment_years_value * 365.25)
+
+    # --------------------------------------------------------
+    # Credit-card information
+    # --------------------------------------------------------
+
+    card_balance = safe_float(credit_card_balance)
+    card_limit = safe_float(credit_card_limit)
 
     if (
-        np.isfinite(income)
-        and income > 0
+        card_balance is not None
+        and card_limit is not None
+        and card_limit > 0
     ):
+        utilization = card_balance / card_limit
 
-        if np.isfinite(credit):
+        data["credit_card_avg_utilization"] = utilization
+        data["credit_card_max_utilization"] = utilization
+        data["credit_card_avg_balance"] = card_balance
 
-            values["credit_to_income_ratio"] = (
-                credit / income
-            )
+    # --------------------------------------------------------
+    # Historical loan information
+    # --------------------------------------------------------
 
-        if np.isfinite(annuity):
-
-            values["annuity_to_income_ratio"] = (
-                annuity / income
-            )
-
-    # ========================================================
-    # External Credit Scores
-    # ========================================================
-
-    ext1 = safe_float(
-        raw.get("ext_source_1")
-    )
-
-    ext2 = safe_float(
-        raw.get("ext_source_2")
-    )
-
-    ext3 = safe_float(
-        raw.get("ext_source_3")
-    )
-
-    values["ext_source_1"] = ext1
-
-    values["ext_source_2"] = ext2
-
-    values["ext_source_3"] = ext3
-
-    external_scores = [
-        score
-        for score in [ext1, ext2, ext3]
-        if np.isfinite(score)
-    ]
-
-    if external_scores:
-
-        values["ext_source_mean"] = (
-            sum(external_scores)
-            / len(external_scores)
+    if previous_loans is not None:
+        data["installment_previous_loans"] = safe_float(
+            previous_loans
         )
 
-    # ========================================================
-    # Document Flag
-    # ========================================================
-
-    values["flag_document_3"] = raw.get(
-        "flag_document_3",
-        0
-    )
-
-    # ========================================================
-    # Region Information
-    # ========================================================
-
-    values["region_rating_client"] = raw.get(
-        "region_rating_client",
-        np.nan
-    )
-
-    values["region_rating_client_w_city"] = raw.get(
-        "region_rating_client_w_city",
-        np.nan
-    )
-
-    # ========================================================
-    # Final Feature Contract
-    # ========================================================
-
-    final_features = {
-        feature: values.get(
-            feature,
-            np.nan
+    if previous_approved is not None:
+        data["previous_approved_count"] = safe_float(
+            previous_approved
         )
-        for feature in FEATURES
-    }
 
-    return final_features
+    if previous_refused is not None:
+        data["previous_refused_count"] = safe_float(
+            previous_refused
+        )
+
+    approved_count = safe_float(previous_approved)
+    refused_count = safe_float(previous_refused)
+
+    if approved_count is not None and refused_count is not None:
+        total_previous = approved_count + refused_count
+
+        if total_previous > 0:
+            data["previous_approval_rate"] = (
+                approved_count
+                / total_previous
+            )
+
+            data["previous_refusal_rate"] = (
+                refused_count
+                / total_previous
+            )
+
+    if previous_overdue is not None:
+        data["bureau_max_overdue"] = safe_float(
+            previous_overdue
+        )
+
+    if max_dpd is not None:
+        max_dpd_value = safe_float(max_dpd)
+        data["installment_max_payment_delay"] = max_dpd_value
+
+        if max_dpd_value is not None and max_dpd_value > 0:
+            data["credit_card_dpd_rate"] = 1.0
+
+    # --------------------------------------------------------
+    # Existing model features without direct customer inputs
+    # --------------------------------------------------------
+    #
+    # These remain None:
+    #
+    # ext_source_1
+    # ext_source_2
+    # ext_source_3
+    # ext_source_mean
+    #
+    # bureau_total_credit
+    # bureau_total_debt
+    # bureau_avg_days_credit
+    #
+    # installment_late_payment_rate
+    # installment_avg_payment_ratio
+    #
+    # POS cash features
+    #
+    # etc.
+    #
+    # FastAPI/model pipeline handles missing values.
+    # --------------------------------------------------------
+
+    return make_json_safe(data)
 
 
 # ============================================================
-# Risk Interpretation
-# ============================================================
-
-def risk_result(
-    probability: float
-) -> Dict[str, str]:
-
-    if probability >= 0.70:
-
-        return {
-            "level": "HIGH RISK",
-            "message": (
-                "The applicant has a high probability "
-                "of repayment difficulty."
-            ),
-        }
-
-    elif probability >= 0.40:
-
-        return {
-            "level": "MEDIUM RISK",
-            "message": (
-                "The applicant has a moderate probability "
-                "of repayment difficulty."
-            ),
-        }
-
-    else:
-
-        return {
-            "level": "LOW RISK",
-            "message": (
-                "The applicant has a relatively low "
-                "probability of repayment difficulty."
-            ),
-        }
-
-
-# ============================================================
-# Streamlit Page Configuration
+# PAGE CONFIG
 # ============================================================
 
 st.set_page_config(
-    page_title="Home Credit Risk Prediction",
+    page_title="Credit Risk Assessment",
     page_icon="🏦",
     layout="wide",
 )
 
 
 # ============================================================
-# Header
+# HEADER
 # ============================================================
 
-st.title(
-    "🏦 Home Credit Risk Prediction"
-)
+st.title("🏦 Credit Risk Assessment System")
 
-st.write(
-    "Enter the applicant's basic information below "
-    "to estimate their credit risk."
+st.markdown(
+    """
+    Enter the applicant's financial, employment, loan and
+    credit information below. The system calculates key
+    repayment-capacity indicators and then sends the available
+    information to the machine-learning credit-risk model.
+    """
 )
 
 st.info(
-    "Only information normally collected during a "
-    "loan application is required. Historical credit, "
-    "payment and loan information is handled by the "
-    "model's preprocessing pipeline."
+    "⚠️ This is a decision-support system, not an automatic "
+    "loan approval/rejection system. Final lending decisions "
+    "require appropriate human and institutional review."
 )
 
 
 # ============================================================
-# Sidebar - API Status
+# SIDEBAR
 # ============================================================
 
-with st.sidebar:
+st.sidebar.header("System Status")
 
-    st.header("System Status")
-
-    try:
-
-        health_response = requests.get(
-            f"{API_URL}/health",
-            timeout=3
-        )
-
-        if health_response.status_code == 200:
-
-            health_data = (
-                health_response.json()
-            )
-
-            st.success(
-                "API Connected"
-            )
-
-            st.caption(
-                "Model: "
-                + str(
-                    health_data.get(
-                        "model_type",
-                        "XGBoost"
-                    )
-                )
-            )
-
-        else:
-
-            st.error(
-                "API is not responding correctly."
-            )
-
-    except requests.RequestException:
-
-        st.error(
-            "API is offline. Start FastAPI "
-            "before making a prediction."
-        )
-
-    st.divider()
-
-    st.caption(
-        "Home Credit Risk Detection Model"
+try:
+    health_response = requests.get(
+        f"{API_URL}/health",
+        timeout=5,
     )
 
+    if health_response.ok:
+        st.sidebar.success("API: Online")
+    else:
+        st.sidebar.error("API: Error")
+
+except requests.RequestException:
+    st.sidebar.error("API: Offline")
+
+st.sidebar.caption(f"API: {API_URL}")
+
 
 # ============================================================
-# Applicant Information
+# 1. APPLICANT INFORMATION
 # ============================================================
 
-st.header(
-    "👤 Applicant Information"
-)
+st.header("1️⃣ Applicant Information")
 
-col1, col2, col3 = st.columns(3)
-
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
+    age = st.number_input(
+        "Age",
+        min_value=18,
+        max_value=80,
+        value=30,
+    )
 
+with col2:
     gender = st.selectbox(
         "Gender",
         [
             "M",
             "F",
         ],
-        index=1,
     )
 
-    age = st.number_input(
-        "Age (years)",
-        min_value=18,
-        max_value=80,
-        value=30,
-        step=1,
+with col3:
+    family_status = st.selectbox(
+        "Family Status",
+        [
+            "Single / not married",
+            "Married",
+            "Civil marriage",
+            "Separated",
+            "Widow / widower",
+            "Unknown",
+        ],
     )
 
-    education = st.selectbox(
+with col4:
+    dependents = st.number_input(
+        "Number of Dependents",
+        min_value=0,
+        max_value=15,
+        value=0,
+    )
+
+
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    education_type = st.selectbox(
         "Education",
         [
-            "Secondary / secondary special",
             "Higher education",
+            "Secondary / secondary special",
             "Incomplete higher",
             "Lower secondary",
             "Academic degree",
         ],
     )
 
-
 with col2:
-
-    family_status = st.selectbox(
-        "Family Status",
-        [
-            "Married",
-            "Single / not married",
-            "Civil marriage",
-            "Separated",
-            "Widow",
-        ],
-    )
-
-    income_type = st.selectbox(
-        "Income Type",
-        [
-            "Working",
-            "Commercial associate",
-            "Pensioner",
-            "State servant",
-            "Student",
-            "Unemployed",
-            "Businessman",
-            "Maternity leave",
-        ],
-    )
-
     housing_type = st.selectbox(
         "Housing Type",
         [
             "House / apartment",
             "With parents",
-            "Municipal apartment",
             "Rented apartment",
+            "Municipal apartment",
             "Office apartment",
             "Co-op apartment",
         ],
     )
 
+with col3:
+    own_car = st.checkbox(
+        "Owns a car",
+        value=False,
+    )
+
+with col4:
+    own_realty = st.checkbox(
+        "Owns property",
+        value=False,
+    )
+
+
+# ============================================================
+# 2. INCOME & EMPLOYMENT
+# ============================================================
+
+st.header("2️⃣ Income & Employment")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    monthly_income = st.number_input(
+        "Monthly Net Income (₹)",
+        min_value=0.0,
+        value=50000.0,
+        step=5000.0,
+    )
+
+with col2:
+    income_type = st.selectbox(
+        "Income / Employment Type",
+        [
+            "Working",
+            "Commercial associate",
+            "Pensioner",
+            "State servant",
+            "Business owner",
+            "Student",
+            "Unemployed",
+        ],
+    )
 
 with col3:
-
-    contract_type = st.selectbox(
-        "Contract Type",
-        [
-            "Cash loans",
-            "Revolving loans",
-        ],
-    )
-
-    own_car = st.selectbox(
-        "Own a Car?",
-        [
-            "No",
-            "Yes",
-        ],
-    )
-
-    own_realty = st.selectbox(
-        "Own Property?",
-        [
-            "Yes",
-            "No",
-        ],
+    employment_years = st.number_input(
+        "Employment / Business Duration (Years)",
+        min_value=0.0,
+        max_value=50.0,
+        value=3.0,
+        step=0.5,
     )
 
 
 # ============================================================
-# Financial Information
+# 3. EXISTING FINANCIAL OBLIGATIONS
 # ============================================================
 
-st.header(
-    "💰 Financial Information"
+st.header("3️⃣ Existing Financial Obligations")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    existing_emi = st.number_input(
+        "Existing Monthly EMI (₹)",
+        min_value=0.0,
+        value=0.0,
+        step=1000.0,
+    )
+
+with col2:
+    household_expenses = st.number_input(
+        "Monthly Household Expenses (₹)",
+        min_value=0.0,
+        value=20000.0,
+        step=1000.0,
+    )
+
+with col3:
+    active_loans = st.number_input(
+        "Number of Active Loans",
+        min_value=0,
+        max_value=20,
+        value=0,
+    )
+
+
+# ============================================================
+# 4. REQUESTED LOAN
+# ============================================================
+
+st.header("4️⃣ Requested Loan")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    loan_amount = st.number_input(
+        "Requested Loan Amount (₹)",
+        min_value=0.0,
+        value=500000.0,
+        step=25000.0,
+    )
+
+with col2:
+    loan_tenure = st.number_input(
+        "Loan Tenure (Months)",
+        min_value=1,
+        max_value=360,
+        value=60,
+    )
+
+with col3:
+    proposed_emi = st.number_input(
+        "Expected / Proposed Monthly EMI (₹)",
+        min_value=0.0,
+        value=10000.0,
+        step=500.0,
+    )
+
+loan_type = st.selectbox(
+    "Loan Type",
+    [
+        "Personal Loan",
+        "Home Loan",
+        "Auto Loan",
+        "Education Loan",
+        "Consumer Loan",
+        "Business Loan",
+    ],
+)
+
+
+# ============================================================
+# 5. CREDIT HISTORY
+# ============================================================
+
+st.header("5️⃣ Credit History")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    credit_score = st.number_input(
+        "Credit Score",
+        min_value=300,
+        max_value=900,
+        value=750,
+    )
+
+with col2:
+    max_dpd = st.number_input(
+        "Maximum Previous DPD (Days)",
+        min_value=0,
+        max_value=3650,
+        value=0,
+    )
+
+with col3:
+    previous_overdue = st.number_input(
+        "Maximum Previous Overdue Amount (₹)",
+        min_value=0.0,
+        value=0.0,
+        step=1000.0,
+    )
+
+
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    previous_loans = st.number_input(
+        "Previous Loans",
+        min_value=0,
+        max_value=100,
+        value=0,
+    )
+
+with col2:
+    previous_approved = st.number_input(
+        "Previously Approved Loans",
+        min_value=0,
+        max_value=100,
+        value=0,
+    )
+
+with col3:
+    previous_refused = st.number_input(
+        "Previously Refused Loans",
+        min_value=0,
+        max_value=100,
+        value=0,
+    )
+
+with col4:
+    credit_card_balance = st.number_input(
+        "Credit Card Outstanding (₹)",
+        min_value=0.0,
+        value=0.0,
+        step=1000.0,
+    )
+
+
+credit_card_limit = st.number_input(
+    "Total Credit Card Limit (₹)",
+    min_value=0.0,
+    value=100000.0,
+    step=5000.0,
+)
+
+
+# ============================================================
+# 6. FINANCIAL ANALYSIS
+# ============================================================
+
+st.header("6️⃣ Financial Analysis")
+
+ratios = calculate_ratios(
+    monthly_income=monthly_income,
+    existing_emi=existing_emi,
+    household_expenses=household_expenses,
+    proposed_emi=proposed_emi,
+    loan_amount=loan_amount,
 )
 
 col1, col2, col3, col4 = st.columns(4)
 
-
 with col1:
-
-    income = st.number_input(
-        "Annual Income",
-        min_value=10000.0,
-        value=500000.0,
-        step=10000.0,
-        help="Applicant's total annual income.",
-    )
-
+    if ratios["foir"] is not None:
+        st.metric(
+            "FOIR",
+            f"{ratios['foir']:.1f}%",
+        )
+    else:
+        st.metric("FOIR", "N/A")
 
 with col2:
-
-    credit = st.number_input(
-        "Requested Credit Amount",
-        min_value=1000.0,
-        value=300000.0,
-        step=10000.0,
-        help="Amount of credit requested.",
-    )
-
+    if ratios["total_dti"] is not None:
+        st.metric(
+            "Total Debt Burden",
+            f"{ratios['total_dti']:.1f}%",
+        )
+    else:
+        st.metric("Total Debt Burden", "N/A")
 
 with col3:
-
-    annuity = st.number_input(
-        "Loan Annuity / EMI",
-        min_value=100.0,
-        value=20000.0,
-        step=1000.0,
-        help="Expected periodic loan payment.",
+    st.metric(
+        "Disposable Income",
+        f"₹{ratios['disposable_income']:,.0f}",
     )
-
 
 with col4:
-
-    goods_price = st.number_input(
-        "Goods / Purchase Price",
-        min_value=1000.0,
-        value=300000.0,
-        step=10000.0,
-        help="Approximate price of the financed goods or asset.",
-    )
-
-
-# ============================================================
-# Employment Information
-# ============================================================
-
-st.header(
-    "💼 Employment Information"
-)
-
-employment_years = st.number_input(
-    "Employment Experience (years)",
-    min_value=0.0,
-    max_value=60.0,
-    value=5.0,
-    step=0.5,
-)
+    if ratios["loan_to_income"] is not None:
+        st.metric(
+            "Loan / Annual Income",
+            f"{ratios['loan_to_income']:.2f}x",
+        )
+    else:
+        st.metric(
+            "Loan / Annual Income",
+            "N/A",
+        )
 
 
-# ============================================================
-# External Credit Information
-# ============================================================
-
-st.header(
-    "📊 External Credit Information"
+foir = ratios.get("foir")
+capacity_message = (
+    get_credit_capacity_message(foir)
+    if foir is not None
+    else "N/A"
 )
 
 st.caption(
-    "Enter external credit scores if they are available. "
-    "Scores should normally be between 0 and 1."
+    f"Repayment capacity indicator: **{capacity_message}**"
 )
 
-col1, col2, col3 = st.columns(3)
-
-
-with col1:
-
-    ext_source_1 = st.number_input(
-        "External Credit Score 1",
-        min_value=0.0,
-        max_value=1.0,
-        value=0.0,
-        step=0.01,
+if ratios["disposable_income"] < 0:
+    st.warning(
+        "⚠️ The applicant's calculated monthly cash flow is "
+        "negative after household expenses and total EMIs."
     )
 
-
-with col2:
-
-    ext_source_2 = st.number_input(
-        "External Credit Score 2",
-        min_value=0.0,
-        max_value=1.0,
-        value=0.0,
-        step=0.01,
-    )
-
-
-with col3:
-
-    ext_source_3 = st.number_input(
-        "External Credit Score 3",
-        min_value=0.0,
-        max_value=1.0,
-        value=0.0,
-        step=0.01,
+if foir is not None and foir > 50:
+    st.warning(
+        "⚠️ Total EMI burden is high relative to monthly income."
     )
 
 
 # ============================================================
-# Optional Bank Information
+# MODEL INPUT PREPARATION
 # ============================================================
 
-with st.expander(
-    "🏦 Optional Bank Information"
-):
-
-    st.caption(
-        "These fields can be populated by a bank employee "
-        "when the information is available."
-    )
-
-    col1, col2 = st.columns(2)
-
-
-    with col1:
-
-        region_rating = st.selectbox(
-            "Region Rating",
-            [
-                "Not Available",
-                "1",
-                "2",
-                "3",
-            ],
-        )
-
-
-    with col2:
-
-        region_rating_city = st.selectbox(
-            "Region Rating with City",
-            [
-                "Not Available",
-                "1",
-                "2",
-                "3",
-            ],
-        )
+model_features = build_model_features(
+    age=age,
+    employment_years=employment_years,
+    monthly_income=monthly_income,
+    loan_amount=loan_amount,
+    proposed_emi=proposed_emi,
+    existing_emi=existing_emi,
+    household_expenses=household_expenses,
+    credit_score=credit_score,
+    max_dpd=max_dpd,
+    previous_overdue=previous_overdue,
+    previous_loans=previous_loans,
+    previous_approved=previous_approved,
+    previous_refused=previous_refused,
+    credit_card_balance=credit_card_balance,
+    credit_card_limit=credit_card_limit,
+    housing_type=housing_type,
+    education_type=education_type,
+    income_type=income_type,
+    family_status=family_status,
+    gender=gender,
+    own_car=own_car,
+    own_realty=own_realty,
+)
 
 
 # ============================================================
-# Raw Applicant Input
+# 7. CREDIT RISK PREDICTION
 # ============================================================
 
-raw_input = {
+st.header("7️⃣ Credit Risk Assessment")
 
-    # Applicant
-    "code_gender": gender,
-
-    "name_education_type": education,
-
-    "name_family_status": family_status,
-
-    "name_income_type": income_type,
-
-    "name_housing_type": housing_type,
-
-    "name_contract_type": contract_type,
-
-    "name_type_suite": "Unaccompanied",
-
-    # Ownership
-    "flag_own_car": (
-        1
-        if own_car == "Yes"
-        else 0
-    ),
-
-    "flag_own_realty": (
-        1
-        if own_realty == "Yes"
-        else 0
-    ),
-
-    # Financial
-    "amt_income_total": income,
-
-    "amt_credit": credit,
-
-    "amt_annuity": annuity,
-
-    "amt_goods_price": goods_price,
-
-    # Age
-    "age_years": age,
-
-    # Employment
-    "employment_years": employment_years,
-
-    # External credit
-    "ext_source_1": ext_source_1,
-
-    "ext_source_2": ext_source_2,
-
-    "ext_source_3": ext_source_3,
-
-    # Document
-    "flag_document_3": 0,
-
-    # Region
-    "region_rating_client": (
-        np.nan
-        if region_rating == "Not Available"
-        else float(region_rating)
-    ),
-
-    "region_rating_client_w_city": (
-        np.nan
-        if region_rating_city == "Not Available"
-        else float(region_rating_city)
-    ),
-}
-
-
-# ============================================================
-# Prediction Button
-# ============================================================
-
-st.divider()
-
-predict_button = st.button(
+if st.button(
     "🔍 Check Credit Risk",
     type="primary",
     use_container_width=True,
-)
+):
 
-
-# ============================================================
-# Prediction
-# ============================================================
-
-if predict_button:
-
-    # --------------------------------------------------------
-    # Validation
-    # --------------------------------------------------------
-
-    if income <= 0:
-
-        st.error(
-            "Annual income must be greater than zero."
-        )
-
-        st.stop()
-
-
-    if credit <= 0:
-
-        st.error(
-            "Credit amount must be greater than zero."
-        )
-
-        st.stop()
-
-
-    if annuity <= 0:
-
-        st.error(
-            "Loan annuity / EMI must be greater than zero."
-        )
-
-        st.stop()
-
-
-    # --------------------------------------------------------
-    # Generate model features
-    # --------------------------------------------------------
-
-    features = calculate_features(
-        raw_input
-    )
-
-
-    # --------------------------------------------------------
-    # Verify exactly 50 features
-    # --------------------------------------------------------
-
-    if len(features) != 50:
-
-        st.error(
-            "Model input error: expected 50 features, "
-            f"but generated {len(features)}."
-        )
-
-        st.stop()
-
-
-    if set(features.keys()) != set(FEATURES):
-
-        st.error(
-            "Model feature mismatch detected."
-        )
-
-        st.stop()
-
-
-    # --------------------------------------------------------
-    # Convert NaN / Infinity to JSON-safe null
-    # --------------------------------------------------------
-
-    json_safe_features = (
-        make_features_json_safe(
-            features
-        )
-    )
-
-
-    # --------------------------------------------------------
-    # Final payload
-    # --------------------------------------------------------
-
-    payload = {
-        "features": json_safe_features
-    }
-
-
-    # --------------------------------------------------------
-    # Prediction API
-    # --------------------------------------------------------
-
-    with st.spinner(
-        "Analyzing applicant credit risk..."
-    ):
+    with st.spinner("Analyzing credit risk..."):
 
         try:
+
+            payload = {
+                "features": make_json_safe(
+                    model_features
+                )
+            }
 
             response = requests.post(
                 f"{API_URL}/predict",
@@ -965,212 +861,265 @@ if predict_button:
                 timeout=30,
             )
 
+            if response.status_code != 200:
+
+                st.error(
+                    f"Prediction API returned "
+                    f"HTTP {response.status_code}"
+                )
+
+                try:
+                    st.code(
+                        response.json()
+                    )
+                except Exception:
+                    st.code(response.text)
+
+            else:
+
+                result = response.json()
+
+                probability = float(
+                    result.get(
+                        "default_probability",
+                        0,
+                    )
+                )
+
+                threshold = float(
+                    result.get(
+                        "threshold",
+                        0.50,
+                    )
+                )
+
+                risk_level, risk_title, risk_description = (
+                    risk_result(
+                        probability,
+                        threshold,
+                    )
+                )
+
+                # ------------------------------------------------
+                # RESULT
+                # ------------------------------------------------
+
+                if risk_level == "LOW":
+                    st.success(
+                        f"### 🟢 {risk_level} RISK"
+                    )
+
+                elif risk_level == "MEDIUM":
+                    st.warning(
+                        f"### 🟡 {risk_level} RISK"
+                    )
+
+                else:
+                    st.error(
+                        f"### 🔴 {risk_level} RISK"
+                    )
+
+                st.subheader(risk_title)
+
+                st.write(risk_description)
+
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+                    st.metric(
+                        "Model Probability",
+                        f"{probability:.2%}",
+                    )
+
+                with col2:
+                    st.metric(
+                        "Model Threshold",
+                        f"{threshold:.2%}",
+                    )
+
+                with col3:
+                    st.metric(
+                        "FOIR",
+                        (
+                            f"{ratios['foir']:.1f}%"
+                            if ratios["foir"] is not None
+                            else "N/A"
+                        ),
+                    )
+
+                # ------------------------------------------------
+                # CREDIT INDICATORS
+                # ------------------------------------------------
+
+                st.subheader("Credit Indicators")
+
+                indicator_col1, indicator_col2 = st.columns(2)
+
+                with indicator_col1:
+
+                    if credit_score >= 750:
+                        st.success(
+                            "✓ Strong credit-score range"
+                        )
+
+                    elif credit_score >= 650:
+                        st.warning(
+                            "⚠ Moderate credit-score range"
+                        )
+
+                    else:
+                        st.error(
+                            "⚠ Low credit-score range"
+                        )
+
+                    if max_dpd == 0:
+                        st.success(
+                            "✓ No reported previous DPD"
+                        )
+                    elif max_dpd <= 30:
+                        st.warning(
+                            f"⚠ Previous DPD: {max_dpd} days"
+                        )
+                    else:
+                        st.error(
+                            f"⚠ Significant previous DPD: "
+                            f"{max_dpd} days"
+                        )
+
+                with indicator_col2:
+
+                    foor_value = ratios.get("foir")
+                    disposable_income = ratios.get("disposable_income")
+
+                    if foor_value is None:
+                        st.info("ℹ FOIR unavailable for this scenario")
+                    elif foor_value <= 30:
+                        st.success(
+                            "✓ EMI burden appears comfortable"
+                        )
+
+                    elif foor_value <= 40:
+                        st.warning(
+                            "⚠ EMI burden requires review"
+                        )
+
+                    elif foor_value <= 50:
+                        st.warning(
+                            "⚠ High EMI burden"
+                        )
+
+                    else:
+                        st.error(
+                            "⚠ Very high EMI burden"
+                        )
+
+                    if disposable_income is None:
+                        st.info(
+                            "ℹ Estimated disposable income unavailable"
+                        )
+                    elif disposable_income >= 0:
+                        st.success(
+                            "✓ Positive estimated disposable income"
+                        )
+                    else:
+                        st.error(
+                            "⚠ Negative estimated disposable income"
+                        )
+
+                # ------------------------------------------------
+                # RECOMMENDATION
+                # ------------------------------------------------
+
+                st.subheader("Assessment Recommendation")
+
+                foor_value = ratios.get("foir")
+                disposable_income = ratios.get("disposable_income")
+
+                if (
+                    risk_level == "LOW"
+                    and foor_value is not None
+                    and foor_value <= 40
+                    and disposable_income is not None
+                    and disposable_income >= 0
+                ):
+                    st.success(
+                        "The application appears relatively "
+                        "comfortable based on the available "
+                        "financial and model indicators. "
+                        "Proceed with normal credit verification."
+                    )
+
+                elif risk_level == "HIGH":
+                    st.error(
+                        "Additional credit assessment is "
+                        "recommended. Review income stability, "
+                        "existing liabilities, credit history, "
+                        "bank statements and repayment capacity "
+                        "before making a lending decision."
+                    )
+
+                else:
+                    st.warning(
+                        "The application requires additional "
+                        "review. Verify income, liabilities, "
+                        "credit history and repayment capacity "
+                        "before making a lending decision."
+                    )
+
+                # ------------------------------------------------
+                # TECHNICAL DETAILS
+                # ------------------------------------------------
+
+                with st.expander(
+                    "Technical Model Details"
+                ):
+
+                    st.json(result)
+
+                    st.write(
+                        "Features supplied to model:",
+                        len(model_features),
+                    )
+
+                    st.write(
+                        "Current trained model features:",
+                        len(FEATURES),
+                    )
+
+                    st.caption(
+                        "Note: Credit score, monthly income, "
+                        "existing EMI, household expenses, "
+                        "dependents and loan tenure are currently "
+                        "collected for the bank-style UI and "
+                        "financial analysis. They will affect "
+                        "the XGBoost prediction only after the "
+                        "model is retrained with these features."
+                    )
+
         except requests.RequestException as exc:
 
             st.error(
-                "Unable to connect to the prediction API."
+                "Unable to connect to the FastAPI prediction service."
             )
 
-            st.code(
-                str(exc)
+            st.code(str(exc))
+
+        except Exception as exc:
+
+            st.error(
+                "Unexpected error while processing the prediction."
             )
 
-            st.stop()
+            st.code(str(exc))
 
 
-    # --------------------------------------------------------
-    # Handle API errors
-    # --------------------------------------------------------
+# ============================================================
+# FOOTER
+# ============================================================
 
-    if response.status_code != 200:
+st.divider()
 
-        st.error(
-            f"Prediction failed "
-            f"(HTTP {response.status_code})."
-        )
-
-        try:
-
-            st.json(
-                response.json()
-            )
-
-        except ValueError:
-
-            st.code(
-                response.text
-            )
-
-        st.stop()
-
-
-    # --------------------------------------------------------
-    # Parse response
-    # --------------------------------------------------------
-
-    try:
-
-        result = response.json()
-
-    except ValueError:
-
-        st.error(
-            "The API returned an invalid response."
-        )
-
-        st.stop()
-
-
-    # --------------------------------------------------------
-    # Extract prediction
-    # --------------------------------------------------------
-
-    probability = safe_float(
-        result.get(
-            "default_probability"
-        ),
-        default=np.nan
-    )
-
-    predicted_class = result.get(
-        "predicted_class"
-    )
-
-
-    if not np.isfinite(probability):
-
-        st.error(
-            "The API returned an invalid "
-            "default probability."
-        )
-
-        st.stop()
-
-
-    # --------------------------------------------------------
-    # Risk assessment
-    # --------------------------------------------------------
-
-    risk = risk_result(
-        probability
-    )
-
-
-    st.header(
-        "📋 Credit Risk Assessment"
-    )
-
-
-    col1, col2, col3 = st.columns(3)
-
-
-    with col1:
-
-        st.metric(
-            "Default Probability",
-            f"{probability * 100:.2f}%"
-        )
-
-
-    with col2:
-
-        st.metric(
-            "Prediction",
-            (
-                "Higher Risk"
-                if predicted_class == 1
-                else "Lower Risk"
-            )
-        )
-
-
-    with col3:
-
-        st.metric(
-            "Risk Level",
-            risk["level"]
-        )
-
-
-    # --------------------------------------------------------
-    # Risk message
-    # --------------------------------------------------------
-
-    if risk["level"] == "HIGH RISK":
-
-        st.error(
-            f"⚠️ {risk['message']}"
-        )
-
-    elif risk["level"] == "MEDIUM RISK":
-
-        st.warning(
-            f"⚠️ {risk['message']}"
-        )
-
-    else:
-
-        st.success(
-            f"✅ {risk['message']}"
-        )
-
-
-    # --------------------------------------------------------
-    # Recommendation
-    # --------------------------------------------------------
-
-    st.subheader(
-        "🏦 Recommendation"
-    )
-
-
-    if probability >= 0.70:
-
-        st.write(
-            "The application should undergo additional "
-            "credit review. Consider verifying income, "
-            "existing liabilities and credit history "
-            "before approving the loan."
-        )
-
-    elif probability >= 0.40:
-
-        st.write(
-            "The application shows moderate risk. "
-            "Additional verification of the applicant's "
-            "financial and credit history is recommended."
-        )
-
-    else:
-
-        st.write(
-            "The application shows relatively low risk "
-            "according to the model. Normal credit "
-            "approval procedures can be followed."
-        )
-
-
-    # --------------------------------------------------------
-    # Technical details
-    # --------------------------------------------------------
-
-    with st.expander(
-        "🔧 Technical Details"
-    ):
-
-        st.write(
-            "Features sent to model:",
-            len(features)
-        )
-
-        st.write(
-            "API endpoint:",
-            f"{API_URL}/predict"
-        )
-
-        st.write(
-            "Historical model features that are not "
-            "available from the application form are "
-            "sent as null and handled by the model's "
-            "preprocessing pipeline."
-        )
+st.caption(
+    "Home Credit Risk Detection Model • "
+    "Machine Learning Decision Support System"
+)
