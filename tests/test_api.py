@@ -160,3 +160,14 @@ def test_unknown_features_fail(client):
     )
 
     assert response.status_code == 422
+
+
+def test_nested_features_fail_validation(client):
+    response = client.post('/predict', json={'features': {'amt_income_total': {'value': 10}}})
+    assert response.status_code == 422
+
+
+def test_explicit_null_is_counted_as_missing(client):
+    response = client.post('/predict', json={'features': {'amt_income_total': None}})
+    assert response.status_code == 200
+    assert response.json()['missing_feature_count'] == 3

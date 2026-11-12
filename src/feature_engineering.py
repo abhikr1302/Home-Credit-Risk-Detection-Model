@@ -1,7 +1,8 @@
+
 import numpy as np
 import pandas as pd
 
-from config import (
+from src.config import (
     APPLICATION_TRAIN_PATH,
     APPLICATION_TEST_PATH,
     BUREAU_PATH,
@@ -39,7 +40,7 @@ def safe_divide(
     numerator: pd.Series,
     denominator: pd.Series,
 ) -> pd.Series:
-    """Perform division while safely handling zero denominators."""
+    """Safely divide two Series while handling zero denominators."""
 
     denominator = denominator.replace(0, np.nan)
 
@@ -67,7 +68,8 @@ def create_application_features(
     - Requested credit
     - Loan burden
     - External credit indicators
-    - Basic social/document indicators
+    - Social/document indicators
+    - Basic demographic ratios
 
     Goods / purchase price is intentionally excluded.
     """
@@ -92,7 +94,7 @@ def create_application_features(
 
     # Home Credit contains anomalous employment values.
     df.loc[
-        df["employment_years"] > 100,
+        (df["employment_years"] > 100) | (df["employment_years"] < 0),
         "employment_years",
     ] = np.nan
 
@@ -124,6 +126,24 @@ def create_application_features(
     )
 
     # --------------------------------------------------------
+    # Employment / age
+    # --------------------------------------------------------
+
+    df["employment_to_age_ratio"] = safe_divide(
+        df["employment_years"],
+        df["age_years"],
+    )
+
+    # --------------------------------------------------------
+    # Children / family size
+    # --------------------------------------------------------
+
+    df["children_to_family_ratio"] = safe_divide(
+        df["cnt_children"],
+        df["cnt_fam_members"],
+    )
+
+    # --------------------------------------------------------
     # External source average
     # --------------------------------------------------------
 
@@ -134,7 +154,8 @@ def create_application_features(
     ]
 
     existing_ext_columns = [
-        col for col in ext_columns
+        col
+        for col in ext_columns
         if col in df.columns
     ]
 
@@ -146,10 +167,41 @@ def create_application_features(
         df["ext_source_mean"] = np.nan
 
     # --------------------------------------------------------
+    # Social-circle default rates
+    # --------------------------------------------------------
+
+    if {
+        "obs_30_cnt_social_circle",
+        "def_30_cnt_social_circle",
+    }.issubset(df.columns):
+
+        df["social_30_def_rate"] = safe_divide(
+            df["def_30_cnt_social_circle"],
+            df["obs_30_cnt_social_circle"],
+        )
+
+    else:
+        df["social_30_def_rate"] = np.nan
+
+    if {
+        "obs_60_cnt_social_circle",
+        "def_60_cnt_social_circle",
+    }.issubset(df.columns):
+
+        df["social_60_def_rate"] = safe_divide(
+            df["def_60_cnt_social_circle"],
+            df["obs_60_cnt_social_circle"],
+        )
+
+    else:
+        df["social_60_def_rate"] = np.nan
+
+    # --------------------------------------------------------
     # Selected application columns
     # --------------------------------------------------------
 
     application_columns = [
+
         "sk_id_curr",
         "target",
 
@@ -195,14 +247,20 @@ def create_application_features(
         "obs_60_cnt_social_circle",
         "def_60_cnt_social_circle",
 
-        # Other documented risk indicator
+        # Other documented indicators
         "days_last_phone_change",
         "flag_document_3",
 
-        # Derived financial ratios
+        # Existing derived ratios
         "credit_to_income_ratio",
         "annuity_to_income_ratio",
         "income_per_family_member",
+
+        # New backend-only profile features
+        "employment_to_age_ratio",
+        "children_to_family_ratio",
+        "social_30_def_rate",
+        "social_60_def_rate",
     ]
 
     existing_columns = [
@@ -224,12 +282,16 @@ def create_bureau_features(
     """
     Create applicant-level Bureau features.
 
-    Focus:
-    - Number of historical credit accounts
+    Retained:
+    - Total historical accounts
     - Active / closed accounts
     - Total credit exposure
     - Total debt
-    - Total overdue amount
+    - Total overdue
+    - Debt / credit exposure
+    - Overdue / debt exposure
+    - Average credit/debt per account
+    - Active credit/debt exposure
 
     credit_active remains categorical and is never converted
     to numeric.
@@ -249,7 +311,9 @@ def create_bureau_features(
     ]
 
     for col in numeric_columns:
+
         if col in df.columns:
+
             df[col] = pd.to_numeric(
                 df[col],
                 errors="coerce",
@@ -275,12 +339,33 @@ def create_bureau_features(
     ).astype(int)
 
     # --------------------------------------------------------
+    # Active credit / debt exposure
+    # --------------------------------------------------------
+
+    df["active_credit_amount"] = (
+        df["amt_credit_sum"]
+        .where(
+            df["active_account_flag"] == 1,
+            0,
+        )
+    )
+
+    df["active_debt_amount"] = (
+        df["amt_credit_sum_debt"]
+        .where(
+            df["active_account_flag"] == 1,
+            0,
+        )
+    )
+
+    # --------------------------------------------------------
     # Aggregate Bureau information
     # --------------------------------------------------------
 
     grouped = (
         df.groupby("sk_id_curr")
         .agg(
+
             bureau_total_accounts=(
                 "sk_id_bureau",
                 "count",
@@ -310,8 +395,81 @@ def create_bureau_features(
                 "amt_credit_sum_overdue",
                 "sum",
             ),
+
+            bureau_active_credit=(
+                "active_credit_amount",
+                "sum",
+            ),
+
+            bureau_active_debt=(
+                "active_debt_amount",
+                "sum",
+            ),
         )
         .reset_index()
+    )
+
+    # --------------------------------------------------------
+    # Account ratios
+    # --------------------------------------------------------
+
+    grouped["bureau_closed_account_ratio"] = safe_divide(
+        grouped["bureau_closed_accounts"],
+        grouped["bureau_total_accounts"],
+    )
+
+    # --------------------------------------------------------
+    # Debt / credit ratio
+    # --------------------------------------------------------
+
+    grouped["bureau_debt_to_credit_ratio"] = safe_divide(
+        grouped["bureau_total_debt"],
+        grouped["bureau_total_credit"],
+    )
+
+    # --------------------------------------------------------
+    # Overdue / debt ratio
+    # --------------------------------------------------------
+
+    grouped["bureau_overdue_to_debt_ratio"] = safe_divide(
+        grouped["bureau_total_overdue"],
+        grouped["bureau_total_debt"],
+    )
+
+    # --------------------------------------------------------
+    # Average credit per account
+    # --------------------------------------------------------
+
+    grouped["bureau_avg_credit_per_account"] = safe_divide(
+        grouped["bureau_total_credit"],
+        grouped["bureau_total_accounts"],
+    )
+
+    # --------------------------------------------------------
+    # Average debt per account
+    # --------------------------------------------------------
+
+    grouped["bureau_avg_debt_per_account"] = safe_divide(
+        grouped["bureau_total_debt"],
+        grouped["bureau_total_accounts"],
+    )
+
+    # --------------------------------------------------------
+    # Active credit exposure ratio
+    # --------------------------------------------------------
+
+    grouped["bureau_active_credit_ratio"] = safe_divide(
+        grouped["bureau_active_credit"],
+        grouped["bureau_total_credit"],
+    )
+
+    # --------------------------------------------------------
+    # Active debt exposure ratio
+    # --------------------------------------------------------
+
+    grouped["bureau_active_debt_ratio"] = safe_divide(
+        grouped["bureau_active_debt"],
+        grouped["bureau_total_debt"],
     )
 
     return grouped
@@ -325,9 +483,16 @@ def create_previous_application_features(
     previous_df: pd.DataFrame,
 ) -> pd.DataFrame:
     """
-    Create simple historical application outcome features.
+    Create historical application outcome features.
 
-    Only application outcome counts/rates are retained.
+    Retained:
+    - Total previous applications
+    - Approved count
+    - Refused count
+    - Approval rate
+    - Refusal rate
+    - Refused / approved ratio
+    - Historical approval/refusal indicators
 
     Removed:
     - Average previous loan amount
@@ -364,6 +529,7 @@ def create_previous_application_features(
     grouped = (
         df.groupby("sk_id_curr")
         .agg(
+
             previous_total_applications=(
                 "sk_id_prev",
                 "count",
@@ -383,7 +549,7 @@ def create_previous_application_features(
     )
 
     # --------------------------------------------------------
-    # Approval / refusal rates
+    # Approval rate
     # --------------------------------------------------------
 
     grouped["previous_approval_rate"] = safe_divide(
@@ -391,9 +557,43 @@ def create_previous_application_features(
         grouped["previous_total_applications"],
     )
 
+    # --------------------------------------------------------
+    # Refusal rate
+    # --------------------------------------------------------
+
     grouped["previous_refusal_rate"] = safe_divide(
         grouped["previous_refused_count"],
         grouped["previous_total_applications"],
+    )
+
+    # --------------------------------------------------------
+    # Refused / approved ratio
+    # --------------------------------------------------------
+
+    grouped["previous_refused_to_approved_ratio"] = safe_divide(
+        grouped["previous_refused_count"],
+        grouped["previous_approved_count"],
+    )
+
+    # --------------------------------------------------------
+    # Historical outcome indicators
+    # --------------------------------------------------------
+
+    grouped["previous_has_refused"] = (
+        grouped["previous_refused_count"] > 0
+    ).astype(int)
+
+    grouped["previous_has_approved"] = (
+        grouped["previous_approved_count"] > 0
+    ).astype(int)
+
+    # --------------------------------------------------------
+    # Application activity
+    # --------------------------------------------------------
+
+    grouped["previous_application_outcome_activity"] = (
+        grouped["previous_total_applications"]
+        .clip(upper=10)
     )
 
     return grouped
@@ -413,6 +613,8 @@ def create_credit_card_features(
     - Number of credit cards
     - Average credit limit
     - Average utilization
+    - Maximum utilization
+    - High-utilization card ratio
 
     Removed:
     - Average balance
@@ -423,13 +625,19 @@ def create_credit_card_features(
 
     df = credit_card_df.copy()
 
+    # --------------------------------------------------------
+    # Numeric columns
+    # --------------------------------------------------------
+
     numeric_columns = [
         "amt_credit_limit_actual",
         "amt_balance",
     ]
 
     for col in numeric_columns:
+
         if col in df.columns:
+
             df[col] = pd.to_numeric(
                 df[col],
                 errors="coerce",
@@ -444,6 +652,20 @@ def create_credit_card_features(
         df["amt_credit_limit_actual"],
     )
 
+    # Avoid extreme numerical anomalies.
+    df["utilization"] = (
+        df["utilization"]
+        .clip(lower=0, upper=5)
+    )
+
+    # --------------------------------------------------------
+    # High utilization flag
+    # --------------------------------------------------------
+
+    df["high_utilization_flag"] = (
+        df["utilization"] >= 0.80
+    ).astype(int)
+
     # --------------------------------------------------------
     # Aggregate
     # --------------------------------------------------------
@@ -451,6 +673,7 @@ def create_credit_card_features(
     grouped = (
         df.groupby("sk_id_curr")
         .agg(
+
             credit_card_count=(
                 "sk_id_prev",
                 "nunique",
@@ -463,6 +686,16 @@ def create_credit_card_features(
 
             credit_card_avg_utilization=(
                 "utilization",
+                "mean",
+            ),
+
+            credit_card_max_utilization=(
+                "utilization",
+                "max",
+            ),
+
+            credit_card_high_utilization_ratio=(
+                "high_utilization_flag",
                 "mean",
             ),
         )
@@ -519,17 +752,21 @@ def add_bank_style_features(
     """
     Add business-friendly credit-risk ratios.
 
-    Features:
+    Existing:
     - Monthly gross income
     - Loan annuity / monthly income
     - Bureau debt / annual income
     - Bureau overdue / annual income
     - Bureau credit / annual income
     - Active bureau account ratio
-    - Credit-card utilization
 
-    No manually invented credit score, household expenses,
-    existing EMI, or purchase-price information is used.
+    Additional:
+    - Closed bureau account ratio
+    - Bureau debt / credit ratio
+    - Bureau overdue / debt ratio
+    - Average bureau credit/debt
+    - Active credit/debt exposure
+    - Credit-card utilization indicators
     """
 
     # --------------------------------------------------------
@@ -626,11 +863,12 @@ def build_feature_dataset(
     pos_cash_df: pd.DataFrame,
 ) -> pd.DataFrame:
     """
-    Build the complete applicant-level feature dataset.
+    Build complete applicant-level feature dataset.
 
     Installments and POS/CASH are accepted for compatibility
-    with the existing pipeline. Detailed repayment behavior
-    is intentionally not included in the production feature set.
+    with the existing pipeline.
+
+    Detailed repayment/POS behavioral features remain excluded.
     """
 
     print("Creating application features...")
@@ -681,8 +919,7 @@ def build_feature_dataset(
         "Skipping detailed installment repayment features..."
     )
 
-    # Installment dataset is intentionally not used for
-    # detailed behavioral features.
+    # Intentionally excluded.
 
     # --------------------------------------------------------
     # Credit card
@@ -857,6 +1094,7 @@ def main():
     # --------------------------------------------------------
 
     if "target" in test_features.columns:
+
         test_features = test_features.drop(
             columns=["target"]
         )
@@ -876,11 +1114,13 @@ def main():
     if train_feature_columns != test_feature_columns:
 
         missing_from_test = sorted(
-            train_feature_columns - test_feature_columns
+            train_feature_columns
+            - test_feature_columns
         )
 
         extra_in_test = sorted(
-            test_feature_columns - train_feature_columns
+            test_feature_columns
+            - train_feature_columns
         )
 
         raise ValueError(
@@ -894,6 +1134,7 @@ def main():
     # ========================================================
 
     if "target" not in train_features.columns:
+
         raise ValueError(
             "Target column is missing from training data."
         )
@@ -954,6 +1195,49 @@ def main():
         f"Test output: "
         f"{MODEL_TEST_FEATURES_PATH}"
     )
+
+    # --------------------------------------------------------
+    # New feature summary
+    # --------------------------------------------------------
+
+    new_features = [
+        "employment_to_age_ratio",
+        "children_to_family_ratio",
+        "social_30_def_rate",
+        "social_60_def_rate",
+        "bureau_closed_account_ratio",
+        "bureau_debt_to_credit_ratio",
+        "bureau_overdue_to_debt_ratio",
+        "bureau_avg_credit_per_account",
+        "bureau_avg_debt_per_account",
+        "bureau_active_credit_ratio",
+        "bureau_active_debt_ratio",
+        "previous_refused_to_approved_ratio",
+        "previous_has_refused",
+        "previous_has_approved",
+        "previous_application_outcome_activity",
+        "credit_card_max_utilization",
+        "credit_card_high_utilization_ratio",
+        "monthly_gross_income",
+        "loan_annuity_to_monthly_income_ratio",
+        "bureau_debt_to_annual_income_ratio",
+        "bureau_overdue_to_annual_income_ratio",
+        "bureau_credit_to_annual_income_ratio",
+        "active_bureau_account_ratio",
+    ]
+
+    available_new_features = [
+        col
+        for col in new_features
+        if col in train_features.columns
+    ]
+
+    print(
+        "\nNew backend features added:"
+    )
+
+    for feature in available_new_features:
+        print(f"  + {feature}")
 
 
 # ============================================================

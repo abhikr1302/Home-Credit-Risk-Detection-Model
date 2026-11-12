@@ -2,6 +2,7 @@
 Pydantic schemas for the Home Credit Risk API.
 """
 
+import math
 from typing import Any
 
 from pydantic import (
@@ -45,6 +46,11 @@ class PredictionRequest(BaseModel):
                 "At least one feature must be supplied."
             )
 
+        for name, value in features.items():
+            if value is not None and not isinstance(value, (str, int, float, bool)):
+                raise ValueError(f"Feature {name} must be a scalar value.")
+            if isinstance(value, float) and not math.isfinite(value):
+                raise ValueError(f"Feature {name} must be finite.")
         return features
 
 

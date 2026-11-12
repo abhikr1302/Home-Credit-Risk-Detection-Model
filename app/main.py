@@ -4,9 +4,7 @@ FastAPI application for Home Credit Risk Prediction.
 
 from __future__ import annotations
 
-import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import joblib
 import numpy as np
@@ -29,19 +27,7 @@ from app.schemas import (
 # Configuration
 # ---------------------------------------------------------------------
 
-MODEL_PATH = Path(
-    os.getenv(
-        "MODEL_PATH",
-        "models/xgboost_home_credit_pipeline.joblib",
-    )
-)
-
-CLASSIFICATION_THRESHOLD = float(
-    os.getenv(
-        "CLASSIFICATION_THRESHOLD",
-        "0.50",
-    )
-)
+from src.config import MODEL_PATH, CLASSIFICATION_THRESHOLD
 
 
 # ---------------------------------------------------------------------
@@ -211,10 +197,7 @@ def model_information(
         .model_pipeline
     )
 
-    model = (
-        model_pipeline
-        .named_steps["model"]
-    )
+    model = model_pipeline.named_steps.get("model", model_pipeline.named_steps.get("classifier"))
 
     expected_features = (
         request.app.state
@@ -315,10 +298,7 @@ def predict(
     # ---------------------------------------------------------------
 
     applicant_data = {
-        feature: supplied_features.get(
-            feature,
-            np.nan,
-        )
+        feature: np.nan if supplied_features.get(feature) is None else supplied_features[feature]
         for feature in expected_features
     }
 
@@ -355,6 +335,9 @@ def predict(
     # Classification
     # ---------------------------------------------------------------
 
+    if not np.isfinite(probability) or not 0 <= probability <= 1:
+        raise HTTPException(status_code=500, detail="Model returned an invalid probability.")
+
     predicted_class = int(
         probability
         >= CLASSIFICATION_THRESHOLD
@@ -372,7 +355,7 @@ def predict(
 
     missing_feature_count = (
         len(expected_features)
-        - len(supplied_features)
+        - sum(value is not None for value in supplied_features.values())
     )
 
     # ---------------------------------------------------------------

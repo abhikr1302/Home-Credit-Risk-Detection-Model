@@ -19,7 +19,7 @@ from sklearn.preprocessing import OneHotEncoder
 
 from xgboost import XGBClassifier
 
-from config import (
+from src.config import (
     MODEL_TRAIN_FEATURES_PATH,
     RECOMMENDED_FEATURES_JSON,
     RECOMMENDED_FEATURES_TXT,
@@ -640,122 +640,15 @@ def get_original_feature_name(
 # AGGREGATE ORIGINAL FEATURE IMPORTANCE
 # ============================================================
 
-def aggregate_feature_importance(
-    importance_df: pd.DataFrame,
-    original_features: list,
-) -> pd.DataFrame:
-    """
-    Aggregate transformed feature importance back to the
-    original dataframe feature level.
-
-    This is important for categorical variables because one
-    original categorical column may produce multiple
-    one-hot encoded columns.
-    """
-
-    records = []
-
-    transformed_features = (
-        importance_df[
-            "transformed_feature"
-        ]
-        .tolist()
-    )
-
-    transformed_importances = (
-        importance_df[
-            "importance"
-        ]
-        .tolist()
-    )
-
-    # --------------------------------------------------------
-    # Match every transformed feature to exactly one original
-    # feature.
-    #
-    # We use the known original feature names rather than
-    # splitting on underscores.
-    # --------------------------------------------------------
-
-    for original_feature in original_features:
-
-        total_importance = 0.0
-
-        # Numeric feature example:
-        #
-        # numeric__amt_income_total
-        #
-        # Categorical example:
-        #
-        # categorical__credit_active_ACTIVE
-        #
-        # We therefore remove the transformer prefix first.
-        #
-
-        for (
-            transformed_feature,
-            importance,
-        ) in zip(
-            transformed_features,
-            transformed_importances,
-        ):
-
-            cleaned_name = (
-                get_original_feature_name(
-                    transformed_feature
-                )
-            )
-
-            # Exact numeric feature match.
-            if cleaned_name == original_feature:
-
-                total_importance += float(
-                    importance
-                )
-
-                continue
-
-            # One-hot encoded feature:
-            #
-            # credit_active_ACTIVE
-            #
-            # should map to:
-            #
-            # credit_active
-            #
-            prefix = (
-                original_feature + "_"
-            )
-
-            if cleaned_name.startswith(
-                prefix
-            ):
-
-                total_importance += float(
-                    importance
-                )
-
-        records.append(
-            {
-                "feature": original_feature,
-                "importance": total_importance,
-            }
-        )
-
-    result = pd.DataFrame(
-        records
-    )
-
-    result = (
-        result
-        .sort_values(
-            "importance",
-            ascending=False,
-        )
-        .reset_index(drop=True)
-    )
-
-    return result
+def aggregate_feature_importance(importance_df: pd.DataFrame, original_features: list) -> pd.DataFrame:
+    totals = dict.fromkeys(original_features, 0.0)
+    candidates = sorted(original_features, key=len, reverse=True)
+    for row in importance_df.itertuples(index=False):
+        name = get_original_feature_name(row.transformed_feature)
+        match = name if name in totals else next((feature for feature in candidates if name.startswith(feature + "_")), None)
+        if match is not None:
+            totals[match] += float(row.importance)
+    return pd.DataFrame([{"feature": name, "importance": value} for name, value in totals.items()]).sort_values("importance", ascending=False).reset_index(drop=True)
 
 
 # ============================================================

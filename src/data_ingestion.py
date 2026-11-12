@@ -1,7 +1,7 @@
 from pathlib import Path
 import pandas as pd
 
-from config import (
+from src.config import (
     APPLICATION_TRAIN_PATH,
     APPLICATION_TEST_PATH,
     BUREAU_PATH,

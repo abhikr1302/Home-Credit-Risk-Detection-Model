@@ -1,0 +1,218 @@
+{
+    "baseline": {
+        "model_name": "baseline",
+        "roc_auc": 0.7632005256506179,
+        "pr_auc": 0.2561049578527413,
+        "precision_at_0_50": 0.1741520589150503,
+        "recall_at_0_50": 0.6763343403826787,
+        "f1_at_0_50": 0.2769827195116922,
+        "confusion_matrix_at_0_50": [
+            [
+                40614,
+                15924
+            ],
+            [
+                1607,
+                3358
+            ]
+        ],
+        "threshold_results": [
+            {
+                "threshold": 0.2,
+                "precision": 0.0957,
+                "recall": 0.9637462235649547,
+                "f1": 0.17411079778040572
+            },
+            {
+                "threshold": 0.25,
+                "precision": 0.10454258390472754,
+                "recall": 0.9335347432024169,
+                "f1": 0.1880286403926898
+            },
+            {
+                "threshold": 0.3,
+                "precision": 0.11471392457307951,
+                "recall": 0.8956696878147029,
+                "f1": 0.20337975349294551
+            },
+            {
+                "threshold": 0.35,
+                "precision": 0.12636932707355242,
+                "recall": 0.8457200402819738,
+                "f1": 0.2198832246746786
+            },
+            {
+                "threshold": 0.4,
+                "precision": 0.14086857711018785,
+                "recall": 0.7989929506545821,
+                "f1": 0.239509750649037
+            },
+            {
+                "threshold": 0.45,
+                "precision": 0.15648336727766463,
+                "recall": 0.7427995971802618,
+                "f1": 0.2585076928468791
+            },
+            {
+                "threshold": 0.5,
+                "precision": 0.1741520589150503,
+                "recall": 0.6763343403826787,
+                "f1": 0.2769827195116922
+            },
+            {
+                "threshold": 0.55,
+                "precision": 0.19399612653324724,
+                "recall": 0.6052366565961732,
+                "f1": 0.29381569298460036
+            },
+            {
+                "threshold": 0.6,
+                "precision": 0.21575597255517898,
+                "recall": 0.525679758308157,
+                "f1": 0.30594303129762046
+            }
+        ],
+        "best_f1_threshold": {
+            "threshold": 0.6,
+            "precision": 0.21575597255517898,
+            "recall": 0.525679758308157,
+            "f1": 0.30594303129762046
+        }
+    },
+    "enhanced": {
+        "model_name": "enhanced",
+        "roc_auc": 0.7649307489260225,
+        "pr_auc": 0.2575019534462922,
+        "precision_at_0_50": 0.1766042922084787,
+        "recall_at_0_50": 0.6729103726082578,
+        "f1_at_0_50": 0.2797805970774191,
+        "confusion_matrix_at_0_50": [
+            [
+                40961,
+                15577
+            ],
+            [
+                1624,
+                3341
+            ]
+        ],
+        "threshold_results": [
+            {
+                "threshold": 0.2,
+                "precision": 0.09599164591533456,
+                "recall": 0.9627391742195368,
+                "f1": 0.1745767973557824
+            },
+            {
+                "threshold": 0.25,
+                "precision": 0.10522481502561185,
+                "recall": 0.9309164149043303,
+                "f1": 0.1890775209654326
+            },
+            {
+                "threshold": 0.3,
+                "precision": 0.11619967963026182,
+                "recall": 0.8912386706948641,
+                "f1": 0.20559401570413047
+            },
+            {
+                "threshold": 0.35,
+                "precision": 0.12828041842539917,
+                "recall": 0.8447129909365559,
+                "f1": 0.22273560105154147
+            },
+            {
+                "threshold": 0.4,
+                "precision": 0.14289838337182448,
+                "recall": 0.797583081570997,
+                "f1": 0.242372310799645
+            },
+            {
+                "threshold": 0.45,
+                "precision": 0.15809062188947073,
+                "recall": 0.7357502517623363,
+                "f1": 0.2602593331433457
+            },
+            {
+                "threshold": 0.5,
+                "precision": 0.1766042922084787,
+                "recall": 0.6729103726082578,
+                "f1": 0.2797805970774191
+            },
+            {
+                "threshold": 0.55,
+                "precision": 0.1979661912308505,
+                "recall": 0.6038267875125881,
+                "f1": 0.29817494654134963
+            },
+            {
+                "threshold": 0.6,
+                "precision": 0.21964150467053775,
+                "recall": 0.525679758308157,
+                "f1": 0.30982905982905984
+            }
+        ],
+        "best_f1_threshold": {
+            "threshold": 0.6,
+            "precision": 0.21964150467053775,
+            "recall": 0.525679758308157,
+            "f1": 0.30982905982905984
+        }
+    },
+    "selected_model": "enhanced",
+    "roc_auc_delta": 0.0017302232754046187,
+    "pr_auc_delta": 0.001396995593550887,
+    "precision_delta_at_0_50": 0.002452233293428391,
+    "recall_delta_at_0_50": -0.0034239677744208885,
+    "f1_delta_at_0_50": 0.002797877565726914,
+    "baseline_feature_count": 30,
+    "enhanced_feature_count": 73,
+    "feature_count_delta": 43,
+    "new_backend_features": [
+        "cnt_children",
+        "cnt_fam_members",
+        "amt_income_total",
+        "days_employed",
+        "obs_30_cnt_social_circle",
+        "obs_60_cnt_social_circle",
+        "days_last_phone_change",
+        "credit_to_income_ratio",
+        "annuity_to_income_ratio",
+        "income_per_family_member",
+        "employment_to_age_ratio",
+        "children_to_family_ratio",
+        "social_30_def_rate",
+        "social_60_def_rate",
+        "bureau_total_accounts",
+        "bureau_active_accounts",
+        "bureau_closed_accounts",
+        "bureau_total_credit",
+        "bureau_total_debt",
+        "bureau_total_overdue",
+        "bureau_active_credit",
+        "bureau_active_debt",
+        "bureau_closed_account_ratio",
+        "bureau_debt_to_credit_ratio",
+        "bureau_overdue_to_debt_ratio",
+        "bureau_avg_credit_per_account",
+        "bureau_avg_debt_per_account",
+        "bureau_active_credit_ratio",
+        "bureau_active_debt_ratio",
+        "previous_total_applications",
+        "previous_approved_count",
+        "previous_refused_to_approved_ratio",
+        "previous_has_refused",
+        "previous_has_approved",
+        "previous_application_outcome_activity",
+        "credit_card_count",
+        "credit_card_avg_limit",
+        "credit_card_max_utilization",
+        "credit_card_high_utilization_ratio",
+        "monthly_gross_income",
+        "loan_annuity_to_monthly_income_ratio",
+        "bureau_overdue_to_annual_income_ratio",
+        "bureau_credit_to_annual_income_ratio"
+    ],
+    "random_state": 42,
+    "validation_size": 0.2
+}

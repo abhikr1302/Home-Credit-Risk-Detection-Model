@@ -1,11 +1,15 @@
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 
 DATA_PATH = Path(
-    "data/processed/model_features_train.parquet"
+    Path(__file__).resolve().parents[1] / "data/processed/model_features_train.parquet"
 )
+
+
+pytestmark = pytest.mark.skipif(not DATA_PATH.exists(), reason="Local Kaggle dataset is not available.")
 
 
 def test_processed_dataset_exists():

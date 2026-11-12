@@ -1,0 +1,3 @@
+"""Shared input contract for the production 30-feature model."""
+
+PRODUCTION_FEATURES = ['ext_source_mean', 'name_education_type', 'code_gender', 'name_income_type', 'name_housing_type', 'flag_own_car', 'name_type_suite', 'name_family_status', 'name_contract_type', 'flag_document_3', 'credit_card_avg_utilization', 'ext_source_3', 'region_rating_client', 'previous_refusal_rate', 'flag_own_realty', 'def_60_cnt_social_circle', 'age_years', 'pos_cash_loan_count', 'employment_years', 'active_bureau_account_ratio', 'region_rating_client_w_city', 'ext_source_1', 'ext_source_2', 'def_30_cnt_social_circle', 'previous_approval_rate', 'amt_credit', 'previous_refused_count', 'days_birth', 'amt_annuity', 'bureau_debt_to_annual_income_ratio']

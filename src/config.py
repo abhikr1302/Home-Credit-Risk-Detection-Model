@@ -1,3 +1,5 @@
+import math
+import os
 from pathlib import Path
 
 
@@ -65,9 +67,13 @@ RECOMMENDED_FEATURES_TXT = (
 # MODEL ARTIFACTS
 # ============================================================
 
-MODEL_PATH = (
-    MODELS_DIR / "xgboost_home_credit_pipeline.joblib"
-)
+MODEL_PATH = Path(os.getenv("MODEL_PATH", str(MODELS_DIR / "xgboost_home_credit_pipeline.joblib")))
+if not MODEL_PATH.is_absolute():
+    MODEL_PATH = PROJECT_ROOT / MODEL_PATH
+
+CLASSIFICATION_THRESHOLD = float(os.getenv("CLASSIFICATION_THRESHOLD", "0.60"))
+if not math.isfinite(CLASSIFICATION_THRESHOLD) or not 0 < CLASSIFICATION_THRESHOLD < 1:
+    raise ValueError("CLASSIFICATION_THRESHOLD must be finite and between 0 and 1.")
 
 FINAL_MODEL_METRICS_PATH = (
     REPORTS_DIR / "final_model_metrics.json"
@@ -76,18 +82,3 @@ FINAL_MODEL_METRICS_PATH = (
 FINAL_MODEL_FEATURES_PATH = (
     REPORTS_DIR / "final_model_features.json"
 )
-
-
-# ============================================================
-# CREATE DIRECTORIES
-# ============================================================
-
-for directory in [
-    DATA_DIR,
-    RAW_DATA_DIR,
-    INTERIM_DATA_DIR,
-    PROCESSED_DATA_DIR,
-    MODELS_DIR,
-    REPORTS_DIR,
-]:
-    directory.mkdir(parents=True, exist_ok=True)
