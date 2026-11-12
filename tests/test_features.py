@@ -1,18 +1,18 @@
+
 import numpy as np
 import pandas as pd
 import pytest
 
-from src.feature_engineering import create_application_features, create_bureau_features, safe_divide
-from src.feature_selection import aggregate_feature_importance
-from src.model_contract import PRODUCTION_FEATURES
-from src import model_training, train_model
-from src.config import MODEL_PATH, RECOMMENDED_FEATURES_JSON
-
-
-def test_module_imports_and_production_training_contract():
-    assert model_training.PRODUCTION_FEATURES == PRODUCTION_FEATURES
-    assert train_model.MODEL_PATH != MODEL_PATH
-    assert train_model.load_recommended_features(RECOMMENDED_FEATURES_JSON) == PRODUCTION_FEATURES
+from src.config import MODEL_TRAIN_FEATURES_PATH, PRODUCTION_FEATURES
+from src.feature_engineering import (
+    build_feature_dataset,
+    create_application_features,
+    create_bureau_features,
+    create_credit_card_features,
+    create_pos_cash_features,
+    create_previous_application_features,
+    safe_divide,
+)
 
 
 def test_division_keeps_missing_denominators_missing():
@@ -22,37 +22,88 @@ def test_division_keeps_missing_denominators_missing():
 
 
 def test_application_features_handle_employment_sentinel():
-    data = pd.DataFrame({
-        'sk_id_curr': [1], 'days_birth': [-3652.5], 'days_employed': [365243],
-        'amt_credit': [100], 'amt_income_total': [200], 'amt_annuity': [10],
-        'cnt_fam_members': [2], 'cnt_children': [0],
-        'ext_source_1': [0.2], 'ext_source_2': [np.nan], 'ext_source_3': [0.6],
-    })
+    data = pd.DataFrame(
+        {
+            "days_birth": [-3652.5],
+            "days_employed": [365243],
+            "ext_source_1": [0.2],
+            "ext_source_2": [np.nan],
+            "ext_source_3": [0.6],
+        }
+    )
     row = create_application_features(data).iloc[0]
     assert row.age_years == 10
     assert pd.isna(row.employment_years)
     assert row.ext_source_mean == pytest.approx(0.4)
 
 
-def test_bureau_statuses_are_aggregated_by_applicant():
-    data = pd.DataFrame({
-        'sk_id_curr': [1, 1], 'sk_id_bureau': [10, 11],
-        'credit_active': ['Active', 'Closed'], 'amt_credit_sum': [100, 50],
-        'amt_credit_sum_debt': [40, 0], 'amt_credit_sum_overdue': [5, 0],
-    })
-    row = create_bureau_features(data).iloc[0]
-    assert row.bureau_total_accounts == 2
-    assert row.bureau_active_accounts == 1
-    assert row.bureau_active_credit == 100
-    assert row.bureau_total_debt == 40
+def test_history_tables_produce_the_production_contract():
+    application = pd.DataFrame({name: [0.5] for name in PRODUCTION_FEATURES})
+    application = application.drop(
+        columns=[
+            "previous_approval_rate",
+            "previous_refusal_rate",
+            "previous_refused_count",
+            "credit_card_avg_utilization",
+            "pos_cash_loan_count",
+            "active_bureau_account_ratio",
+            "bureau_debt_to_annual_income_ratio",
+        ]
+    )
+    application["sk_id_curr"] = 1
+    application["target"] = 0
+    application["days_birth"] = -3652.5
+    application["days_employed"] = -365.25
+    application["amt_income_total"] = 200
+    bureau = create_bureau_features(
+        pd.DataFrame(
+            {
+                "sk_id_curr": [1, 1],
+                "sk_id_bureau": [10, 11],
+                "credit_active": ["Active", "Closed"],
+                "amt_credit_sum_debt": [40, 0],
+            }
+        )
+    )
+    previous = create_previous_application_features(
+        pd.DataFrame(
+            {
+                "sk_id_curr": [1, 1],
+                "sk_id_prev": [10, 11],
+                "name_contract_status": ["Approved", "Refused"],
+            }
+        )
+    )
+    cards = create_credit_card_features(
+        pd.DataFrame(
+            {
+                "sk_id_curr": [1],
+                "amt_balance": [25],
+                "amt_credit_limit_actual": [100],
+            }
+        )
+    )
+    pos = create_pos_cash_features(
+        pd.DataFrame({"sk_id_curr": [1, 1], "sk_id_prev": [1, 1]})
+    )
+    result = build_feature_dataset(application, [bureau, previous, cards, pos])
+    assert list(result.columns) == ["sk_id_curr"] + PRODUCTION_FEATURES + ["target"]
+    row = result.iloc[0]
+    assert row.active_bureau_account_ratio == 0.5
+    assert row.bureau_debt_to_annual_income_ratio == 0.2
+    assert row.previous_approval_rate == 0.5
+    assert row.previous_refusal_rate == 0.5
+    assert row.credit_card_avg_utilization == 0.25
+    assert row.pos_cash_loan_count == 1
 
 
-def test_importance_does_not_double_count_prefixes():
-    data = pd.DataFrame({
-        'transformed_feature': ['numeric__income', 'numeric__income_ratio', 'categorical__family_status_Married'],
-        'importance': [0.2, 0.3, 0.5],
-    })
-    result = aggregate_feature_importance(data, ['income', 'income_ratio', 'family', 'family_status']).set_index('feature')
-    assert result.loc['income', 'importance'] == pytest.approx(0.2)
-    assert result.loc['family', 'importance'] == 0
-    assert result.importance.sum() == pytest.approx(1)
+@pytest.mark.skipif(
+    not MODEL_TRAIN_FEATURES_PATH.exists(), reason="Local Kaggle data is unavailable."
+)
+def test_processed_dataset_has_valid_production_features():
+    data = pd.read_parquet(MODEL_TRAIN_FEATURES_PATH)
+    assert set(PRODUCTION_FEATURES).issubset(data.columns)
+    assert not data.empty
+    assert data.sk_id_curr.is_unique
+    assert data.target.notna().all()
+    assert set(data.target.unique()) == {0, 1}
